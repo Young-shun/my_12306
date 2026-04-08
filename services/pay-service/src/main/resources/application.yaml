@@ -10,7 +10,7 @@ spring:
   cloud:
     nacos:
       discovery:
-        server-addr: 127.0.0.1:8848
+        server-addr: 192.168.100.128:8848
       password: nacos
       username: nacos
     sentinel:
@@ -19,12 +19,12 @@ spring:
         port: 8719
   data:
     redis:
-      host: 127.0.0.1
+      host: 192.168.100.128
       port: 6379
       password: 123456
 
 rocketmq:
-  name-server: 127.0.0.1:9876
+  name-server: 192.168.100.128:9876
   producer:
     group: index12306_pay-service_common-message-execute_pg
     send-message-timeout: 2000
@@ -33,12 +33,12 @@ rocketmq:
 
 pay:
   alipay:
-    alipay-public-key: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAhOjhAwc2ICcV5NSQnwuXfvZnmv1IVJjemEtNws/F6AlQMdM5L7unyTKSkLULRB9m4AzT7U/m+dbr61vKRerQlSWjGim1vcLj+ilISN2etuIXOtspkjJpgB2jd9AUhGSTQfQEQwHtlDnBrBXyBxaKRR34NuB5l4ikQcsbmkoCRr3c+TGqS+xNUWgTyWlrxFePSW4MfAHJsQo3Lq44BDTBjUlaWvQ6GDOdY5E4JWZnAceLmxiHj++pTur8RXG8VIMN/umCU3ahnYjCGNh1MLMEVJGGoQtaaVEZgVdvIxCs7zqHZMQzGhIohG4afS5xIudwpH6Ykc+XXbUZEbsVLd6+0QIDAQAB
+    alipay-public-key: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqaGXKD3J9Nj1+n4yjY69Gkng0hYXYvr5sdtXqYHDOH1UcLBgaee4DW5016XVMMLZ5MX02bdqN7ndCY6VpgSkDyPe2vS5wf+drDcSArMKJlUXfJqXUb80kJrn7TZscLza++stGqOzDTR0D3Q4tjR7GgKaUCG2WCjVRgXfEt3/OHHExaCivlMUJ5OQW250gFho0ShyXKx11PJGmSgiWmOcVsq+HgPjNn1taCjUcE+LsghmYdH9fbu3Y4Y5x0jawnFP98oJCxy0PZylJQtnvZq0AHMcK0lGNnYY5Ysz/b9CPS1Aua8f40uiX5+rjohk+GQ4HcuIfkEGRNDKR66moDxJ2QIDAQAB
     app-id: 2021000122637271
     charset: UTF8
     format: json
-    notify-url: http://ems8b7.natappfree.cc/api/pay-service/callback/alipay
-    private-key: MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDFSeH+uvbBUeWRxRwnJRSQeBnvhtMuY7Z220W7VdEAhTA0/QYOttlXf22vk9fW4kTYXwpP9/fQW+MVaErRrt3j8/9e5bbTfUz1jvO57Bp0fX/lrfpMU8VrfYumOiaAz40kH8/NDP1a+PYHHTssvdao9mnrlc30y7hv0FQb7zBr1yaYxwvLyacyaH68QpZHAAKn2EJDBSbCK0RPcg9DPbYAURIM5rtfOJEnBihXGksgm1wH7x/k5bn34JDgcs+2QXKbtkbmKB2INUKe96QoyNUYXZ2kcRWTBupIdsV4ph9FkGbK/7aEa4fJt7b19S6GSMgzBBA9PDphoN/o29oz8k+JAgMBAAECggEAKWRk7ALh/pFmLv1B+NyIwf7QwjZxXExDXhCHQtSwcwF+qb9kY/XtB7SOmMXWBRmYBCV8jmaiMa71p+onuHKNz2PD8m8Tuq+RU/vYGuv0aPhjuxaTaywwQWsnv4p3xZLGNAwQlx7gkROm2rtBTRPPU8fPVUQq3+9WFO+KlgnLCPTOcERmcNARECKrrfigtOhSBmVTu3t7vKeW4OqceZ0PzT1DEXdccgK2bnHycUJ3PsRA7T+cBvXDvMieIRl+tWx7U8wY1HFjoRuL7gSdacDmSxxrc1+UCmkkvjdsVcXsB6tF10WdKERV7EAdlY/dAR8d317ql0zReE6xbYZXchX74QKBgQDxxzAc75eGem1tJnQk9f6zYmXpE2slp1F6ywtK94qDj2fPdCpwNHvBqoVixqGbQKrOPZPKFyEYZ3H5V1dA8RvD7NTTWH7xpFlspAUsPOTrZdoIJKCySE6q3jdJdJzxcN7IMQk/uJWBp9PW37cEnZZuLt1ehbRQu+J5GlzmTm/TpQKBgQDQ5MAtgaClzDR9mI5iK30tfAwYThzeEBoaYpmuIsktaJZw1KQN7MEyNzL37DR16XtD2Sq3zJ4doCOePk6JsFjeTaFIDR3n9jHCESE/dtm/GUXo/K+E4RhoYw7q/r5WbRP4Sy5F+0jbfF+wd7NfjFkm6zmveox6edbL3K/wDZ+3FQKBgFIZXz8UJJHnlKzRt/KtDZYAPbbNfz7D+CkINYd5UzGlSozpV1fOmo+CxdRquomrhdSOmFaxT+2ngs42WEyXEuSO0R4LGOAY/LylXZROATXl2gmV1nNzljLzTjbFQF3EBAJalFds6Gekg4ydXtpUYLZ9d3IXWMlpY1fYGd+iltp5AoGBAIhQHZAUfM50ePRUbuVk16Ssw//ASVonS8FYAkz96iW1kCZEvGFR06h/GMVr37fqCkP2HMgfwDY438VNh1aWOwelxM8NsCxEHag0IWwWlHT9ev9UlPyzHohPy9ZRMceYGmX2OVX1ak+/03mGQwjgvvSEnvoBkFYD18TkV/LgEQ8ZAoGAVqGhHIzYtcV08tBU/d9WTm44ir84caJUrygejQbM08nKEm3oDKs+jJcrkRpXokNO3kRaOefztXZwA6pCcZR5438SO9sD0BLx7VumXF959buLV0X/fES7gaNGbK57rKgj5gyuhdaVvRtcXvBcQ+bOctcrCjLNdS45FMbPa5c+5yk=
+    notify-url: http://s977b96e.natappfree.cc/api/pay-service/callback/alipay
+    private-key: MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCIM+Bel2RuCgR6lzhh5dilRXeVGqTdjCOm+RiVMEPDIiU2jmPO1Ac192V7LSyh1lMFZ4V1YmWPwZujkmlHQdsT6o2bp1FEP/dnAssKFjC9ET34feJT/22F/ESMXjQG5eu8hj+4khVjJpUhyAZWQfSI+GCcDXjOP8B5fTM8qPthRFKs4w++q6bmqykzehrwK/CzawNmBYUJiw9LAE+i8XgGe3Km89K0/E9QeMtInCk5hrNZ61rG4Emde0s4DC8HFMQGp3hlUf28DOoWXIz4tLYgHsoTAoO7d28ZLCNy8u6TzGiKpNFooPhDi8uEh/YA472p0GqcA7C6eL2SFnEC8k3ZAgMBAAECggEBAIIYOule5ZiNjPWjV0F7D1HdZnlO98Z9wtgL+cUWUsMh7DWOEBtQPor3gUEERytV0frJhJo4oBWNsiGtCU38w0rksNnKGT99ccw8yL8brvYIcA7X/sSIp45hBQCmQj+MgXyTJm4farpH8g5QRm1Bllb2FyE3ZPprvmbMhZIdPe8KtJOu7jCFfbmIgD9u7RF4kjoZxlyBoIQE8xrs8JpGKAWYEBUCfvyxQH1e+W7ditu+CXmwz11Vtmt9bdi+enFT4yspxaImx4wy0lXnXKhZMFUw9WGPhWMRbiaS9t/+Xt5P5s5I+VtSy3fggCc+qIVwD+AR+lWRTIxhGp6SXi80ZQECgYEAwYSWfszZpvhaW8CVL9kSVZVCNWZzGacY5HHg9Lk9WPUSiPmaz3WGcnpyyM//jI+TVQj6YnVlCBRgQUAfQ82Tq7WJP8gXfwxf9eSjLiuc4OCzIc2/2ag8hNGGllvO2LBeKzI+gAPruwE7sOF89DgxPE0J5S4C50jQJ6lE4q8PkbECgYEAtC3WoZVSxYs1KGbIw3f73Ah+JPEaYLIhMnalIKGeD5gSR8H/bRspBct3Yta97Ufe2Z5Me4L8UPLKE3Shy+QYkj9qGrHvvQpOukQvjIYffn1bLIaTWzFXrzwAzvYoTWwVyyvjtt8G44XGXdq5N1c/7yrTawmQdjjhT/AcQNcFIKkCgYAOJlu6uc/QXah9vP8rmHu2tks5DFyuK4GucoU4X7MUphbM3TNsp/NEu59Y/5x38qebOCTWvi69AIBpRP8EPivmCkgW2dKd/5GksSsdXSMDbmqqthipGZwTOh7VL7FYNs0r62iWg7Lg4Z4zuMkiMlmnRxrKHysnLjPKMp5O1O4WgQKBgQCB1ZoY+5oWgVZ/03kN6ZLSnkgP5LEGRrXHQFmDJxLX19QsYy3k+DJaW6Ce13Eq36RFGl2wjtW0mw9kb6H7Y1UVZZ7Wt6uyhA/xBxtgXnGpWzls31il2Ot/eXR3rkeiaqVVrz261AGJyCcGEItwxm1qsWiBc/XmStyJFtO1IXwvaQKBgHIyL13zvDLD+e44o+0NKKJxX6apVxnTV3FLKHIYCh1yaoO10i/PpgPzsjIq41eZ8lxAB7xZfxX5BICH//TO6tYkZRdDwqbBCtz//3FplfR2g5DbnBLAFkjJnVCsSaSZyW+U57kIrT4xYV5LLgyshYg6dVwoN06Xi2xS7KTHhkny
     server-url: https://openapi-sandbox.dl.alipaydev.com/gateway.do
     sign-type: RSA2
 

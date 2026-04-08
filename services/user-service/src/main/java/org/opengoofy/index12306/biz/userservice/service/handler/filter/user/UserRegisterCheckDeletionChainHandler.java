@@ -35,6 +35,7 @@ public final class UserRegisterCheckDeletionChainHandler implements UserRegister
 
     @Override
     public void handler(UserRegisterReqDTO requestParam) {
+        // 风控校验：统计证件号历史注销次数，超过阈值直接拒绝注册
         Integer userDeletionNum = userService.queryUserDeletionNum(requestParam.getIdType(), requestParam.getIdCard());
         if (userDeletionNum >= 5) {
             throw new ClientException("证件号多次注销账号已被加入黑名单");

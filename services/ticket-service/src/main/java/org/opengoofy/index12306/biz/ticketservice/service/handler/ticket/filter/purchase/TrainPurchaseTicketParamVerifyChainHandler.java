@@ -49,7 +49,8 @@ import static org.opengoofy.index12306.biz.ticketservice.common.constant.RedisKe
  */
 @Component
 @RequiredArgsConstructor
-public class TrainPurchaseTicketParamVerifyChainHandler implements TrainPurchaseTicketChainFilter<PurchaseTicketReqDTO> {
+public class TrainPurchaseTicketParamVerifyChainHandler
+        implements TrainPurchaseTicketChainFilter<PurchaseTicketReqDTO> {
 
     private final TrainMapper trainMapper;
     private final TrainStationMapper trainStationMapper;
@@ -57,6 +58,7 @@ public class TrainPurchaseTicketParamVerifyChainHandler implements TrainPurchase
 
     @Override
     public void handler(PurchaseTicketReqDTO requestParam) {
+        // 业务校验 + 缓存回填：校验车次存在/售卖有效期，并校验出发到达站点顺序；必要时回填缓存
         // 查询会员购票车次是否存在，通过封装后安全的 Get 方法
         TrainDO trainDO = distributedCache.safeGet(
                 TRAIN_INFO + requestParam.getTrainId(),
@@ -89,17 +91,16 @@ public class TrainPurchaseTicketParamVerifyChainHandler implements TrainPurchase
                             .eq(TrainStationDO::getTrainId, requestParam.getTrainId())
                             .select(TrainStationDO::getDeparture);
                     List<TrainStationDO> actualTrainStationList = trainStationMapper.selectList(queryWrapper);
-                    return CollUtil.isNotEmpty(actualTrainStationList) ? JSON.toJSONString(actualTrainStationList) : null;
+                    return CollUtil.isNotEmpty(actualTrainStationList) ? JSON.toJSONString(actualTrainStationList)
+                            : null;
                 },
                 Index12306Constant.ADVANCE_TICKET_DAY,
-                TimeUnit.DAYS
-        );
+                TimeUnit.DAYS);
         List<TrainStationDO> trainDOList = JSON.parseArray(trainStationStopoverDetailStr, TrainStationDO.class);
         boolean validateStation = validateStation(
                 trainDOList.stream().map(TrainStationDO::getDeparture).toList(),
                 requestParam.getDeparture(),
-                requestParam.getArrival()
-        );
+                requestParam.getArrival());
         if (!validateStation) {
             throw new ClientException("列车车站数据错误");
         }

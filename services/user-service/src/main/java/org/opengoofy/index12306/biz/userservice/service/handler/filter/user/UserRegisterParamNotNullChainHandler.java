@@ -33,6 +33,7 @@ public final class UserRegisterParamNotNullChainHandler implements UserRegisterC
 
     @Override
     public void handler(UserRegisterReqDTO requestParam) {
+        // 校验必填：用户名、密码、手机号、证件类型/号、邮箱、实名均不能为空
         if (Objects.isNull(requestParam.getUsername())) {
             throw new ClientException(UserRegisterErrorCodeEnum.USER_NAME_NOTNULL);
         } else if (Objects.isNull(requestParam.getPassword())) {

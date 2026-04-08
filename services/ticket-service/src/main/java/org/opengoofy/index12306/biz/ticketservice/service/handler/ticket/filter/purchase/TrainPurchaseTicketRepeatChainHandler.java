@@ -31,6 +31,7 @@ public class TrainPurchaseTicketRepeatChainHandler implements TrainPurchaseTicke
 
     @Override
     public void handler(PurchaseTicketReqDTO requestParam) {
+        // TODO 后续补充：判断乘客是否重复购买同一车次/同一时间段
         // TODO 重复购买验证后续实现
     }
 

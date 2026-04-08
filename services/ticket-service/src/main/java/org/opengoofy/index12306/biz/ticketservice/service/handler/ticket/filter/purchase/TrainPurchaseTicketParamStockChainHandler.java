@@ -47,17 +47,23 @@ public class TrainPurchaseTicketParamStockChainHandler implements TrainPurchaseT
 
     @Override
     public void handler(PurchaseTicketReqDTO requestParam) {
+        // 库存校验：按座位类型拆分乘车人，检查站点余票是否满足，必要时回源加载缓存
         // 车次站点是否还有余票。如果用户提交多个乘车人非同一座位类型，拆分验证
-        String keySuffix = StrUtil.join("_", requestParam.getTrainId(), requestParam.getDeparture(), requestParam.getArrival());
+        String keySuffix = StrUtil.join("_", requestParam.getTrainId(), requestParam.getDeparture(),
+                requestParam.getArrival());
         StringRedisTemplate stringRedisTemplate = (StringRedisTemplate) distributedCache.getInstance();
         List<PurchaseTicketPassengerDetailDTO> passengerDetails = requestParam.getPassengers();
         Map<Integer, List<PurchaseTicketPassengerDetailDTO>> seatTypeMap = passengerDetails.stream()
                 .collect(Collectors.groupingBy(PurchaseTicketPassengerDetailDTO::getSeatType));
         seatTypeMap.forEach((seatType, passengerSeatDetails) -> {
-            Object stockObj = stringRedisTemplate.opsForHash().get(TRAIN_STATION_REMAINING_TICKET + keySuffix, String.valueOf(seatType));
+            Object stockObj = stringRedisTemplate.opsForHash().get(TRAIN_STATION_REMAINING_TICKET + keySuffix,
+                    String.valueOf(seatType));
             int stock = Optional.ofNullable(stockObj).map(each -> Integer.parseInt(each.toString())).orElseGet(() -> {
-                Map<String, String> seatMarginMap = seatMarginCacheLoader.load(String.valueOf(requestParam.getTrainId()), String.valueOf(seatType), requestParam.getDeparture(), requestParam.getArrival());
-                return Optional.ofNullable(seatMarginMap.get(String.valueOf(seatType))).map(Integer::parseInt).orElse(0);
+                Map<String, String> seatMarginMap = seatMarginCacheLoader.load(
+                        String.valueOf(requestParam.getTrainId()), String.valueOf(seatType),
+                        requestParam.getDeparture(), requestParam.getArrival());
+                return Optional.ofNullable(seatMarginMap.get(String.valueOf(seatType))).map(Integer::parseInt)
+                        .orElse(0);
             });
             if (stock >= passengerSeatDetails.size()) {
                 return;

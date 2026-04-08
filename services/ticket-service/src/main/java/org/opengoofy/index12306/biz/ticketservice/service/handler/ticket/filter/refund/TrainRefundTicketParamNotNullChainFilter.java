@@ -33,6 +33,7 @@ public class TrainRefundTicketParamNotNullChainFilter implements TrainRefundTick
 
     @Override
     public void handler(RefundTicketReqDTO requestParam) {
+        // 校验必填：订单号、退款类型不能为空；部分退款需携带子订单列表
         if (StrUtil.isBlank(requestParam.getOrderSn())) {
             throw new ClientException("订单号不能为空");
         }

@@ -36,6 +36,7 @@ public final class UserRegisterHasUsernameChainHandler implements UserRegisterCr
 
     @Override
     public void handler(UserRegisterReqDTO requestParam) {
+        // 唯一性校验：检查用户名是否已存在（布隆过滤+Redis集合）
         if (!userLoginService.hasUsername(requestParam.getUsername())) {
             throw new ClientException(UserRegisterErrorCodeEnum.HAS_USERNAME_NOTNULL);
         }

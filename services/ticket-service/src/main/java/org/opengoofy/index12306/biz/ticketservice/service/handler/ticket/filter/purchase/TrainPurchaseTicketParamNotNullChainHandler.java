@@ -31,10 +31,12 @@ import java.util.Objects;
  * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：12306）获取项目资料
  */
 @Component
-public class TrainPurchaseTicketParamNotNullChainHandler implements TrainPurchaseTicketChainFilter<PurchaseTicketReqDTO> {
+public class TrainPurchaseTicketParamNotNullChainHandler
+        implements TrainPurchaseTicketChainFilter<PurchaseTicketReqDTO> {
 
     @Override
     public void handler(PurchaseTicketReqDTO requestParam) {
+        // 校验必填：列车、出发/到达站点与乘车人信息均不能为空，座位类型必须填写
         if (StrUtil.isBlank(requestParam.getTrainId())) {
             throw new ClientException("列车标识不能为空");
         }

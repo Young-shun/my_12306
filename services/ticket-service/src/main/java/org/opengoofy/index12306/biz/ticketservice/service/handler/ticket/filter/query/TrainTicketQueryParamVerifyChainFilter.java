@@ -62,17 +62,18 @@ public class TrainTicketQueryParamVerifyChainFilter implements TrainTicketQueryC
 
     @Override
     public void handler(TicketPageQueryReqDTO requestParam) {
+        // 业务校验 + 缓存回填：校验出发/目的地是否存在，不存在则尝试加载地区/站点缓存后再判定
         StringRedisTemplate stringRedisTemplate = (StringRedisTemplate) distributedCache.getInstance();
         HashOperations<String, Object, Object> hashOperations = stringRedisTemplate.opsForHash();
         List<Object> actualExistList = hashOperations.multiGet(
                 QUERY_ALL_REGION_LIST,
-                ListUtil.toList(requestParam.getFromStation(), requestParam.getToStation())
-        );
+                ListUtil.toList(requestParam.getFromStation(), requestParam.getToStation()));
         long emptyCount = actualExistList.stream().filter(Objects::isNull).count();
         if (emptyCount == 0L) {
             return;
         }
-        if (emptyCount == 1L || (emptyCount == 2L && CACHE_DATA_ISNULL_AND_LOAD_FLAG && distributedCache.hasKey(QUERY_ALL_REGION_LIST))) {
+        if (emptyCount == 1L || (emptyCount == 2L && CACHE_DATA_ISNULL_AND_LOAD_FLAG
+                && distributedCache.hasKey(QUERY_ALL_REGION_LIST))) {
             throw new ClientException("出发地或目的地不存在");
         }
         RLock lock = redissonClient.getLock(LOCK_QUERY_ALL_REGION_LIST);
@@ -81,8 +82,7 @@ public class TrainTicketQueryParamVerifyChainFilter implements TrainTicketQueryC
             if (distributedCache.hasKey(QUERY_ALL_REGION_LIST)) {
                 actualExistList = hashOperations.multiGet(
                         QUERY_ALL_REGION_LIST,
-                        ListUtil.toList(requestParam.getFromStation(), requestParam.getToStation())
-                );
+                        ListUtil.toList(requestParam.getFromStation(), requestParam.getToStation()));
                 emptyCount = actualExistList.stream().filter(Objects::nonNull).count();
                 if (emptyCount != 2L) {
                     throw new ClientException("出发地或目的地不存在");
@@ -101,7 +101,8 @@ public class TrainTicketQueryParamVerifyChainFilter implements TrainTicketQueryC
             hashOperations.putAll(QUERY_ALL_REGION_LIST, regionValueMap);
             CACHE_DATA_ISNULL_AND_LOAD_FLAG = true;
             emptyCount = regionValueMap.keySet().stream()
-                    .filter(each -> StrUtil.equalsAny(each.toString(), requestParam.getFromStation(), requestParam.getToStation()))
+                    .filter(each -> StrUtil.equalsAny(each.toString(), requestParam.getFromStation(),
+                            requestParam.getToStation()))
                     .count();
             if (emptyCount != 2L) {
                 throw new ClientException("出发地或目的地不存在");
