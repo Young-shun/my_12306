@@ -17,7 +17,8 @@ for index, jsonObj in ipairs(jsonArray) do
         local startStation = tostring(alongJsonObj.startStation)
         local endStation = tostring(alongJsonObj.endStation)
         local actualInnerHashKey = startStation .. "_" .. endStation .. "_" .. seatType
-        local ticketSeatAvailabilityTokenValue = tonumber(redis.call('hget', KEYS[1], tostring(actualInnerHashKey)))
+        local tokenValueRaw = redis.call('hget', KEYS[1], tostring(actualInnerHashKey))
+        local ticketSeatAvailabilityTokenValue = tonumber(tokenValueRaw) or 0
         if ticketSeatAvailabilityTokenValue >= 0 then
             redis.call('hincrby', KEYS[1], tostring(actualInnerHashKey), count)
         end

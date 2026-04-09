@@ -16,7 +16,8 @@ for index, jsonObj in ipairs(jsonArray) do
     local seatType = tonumber(jsonObj.seatType)
     local count = tonumber(jsonObj.count)
     local actualInnerHashKey = actualKey .. "_" .. seatType
-    local ticketSeatAvailabilityTokenValue = tonumber(redis.call('hget', KEYS[1], tostring(actualInnerHashKey)))
+    local tokenValueRaw = redis.call('hget', KEYS[1], tostring(actualInnerHashKey))
+    local ticketSeatAvailabilityTokenValue = tonumber(tokenValueRaw) or 0
     if ticketSeatAvailabilityTokenValue < count then
         tokenIsNull = true
         table.insert(tokenIsNullSeatTypeCounts, seatType .. "_" .. count)

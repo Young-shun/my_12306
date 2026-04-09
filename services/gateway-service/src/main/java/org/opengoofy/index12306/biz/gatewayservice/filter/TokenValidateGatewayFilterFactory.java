@@ -17,17 +17,23 @@
 
 package org.opengoofy.index12306.biz.gatewayservice.filter;
 
+import cn.hutool.core.util.StrUtil;
 import com.alibaba.nacos.client.naming.utils.CollectionUtils;
 import org.opengoofy.index12306.biz.gatewayservice.config.Config;
 import org.opengoofy.index12306.biz.gatewayservice.toolkit.JWTUtil;
 import org.opengoofy.index12306.biz.gatewayservice.toolkit.UserInfoDTO;
 import org.opengoofy.index12306.framework.starter.bases.constant.UserConstant;
+import org.opengoofy.index12306.framework.starter.convention.result.Result;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.factory.AbstractGatewayFilterFactory;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -41,8 +47,16 @@ import java.util.Objects;
 @Component
 public class TokenValidateGatewayFilterFactory extends AbstractGatewayFilterFactory<Config> {
 
-    public TokenValidateGatewayFilterFactory() {
+    private static final String USER_SERVICE_NAME = "index12306-user${unique-name:}-service";
+    private static final String CHECK_LOGIN_PATH = "/api/user-service/check-login";
+
+    private final WebClient.Builder webClientBuilder;
+    private final Environment environment;
+
+    public TokenValidateGatewayFilterFactory(WebClient.Builder webClientBuilder, Environment environment) {
         super(Config.class);
+        this.webClientBuilder = webClientBuilder;
+        this.environment = environment;
     }
 
     /**
@@ -57,23 +71,22 @@ public class TokenValidateGatewayFilterFactory extends AbstractGatewayFilterFact
             String requestPath = request.getPath().toString();
             if (isPathInBlackPreList(requestPath, config.getBlackPathPre())) {
                 String token = request.getHeaders().getFirst("Authorization");
-                // TODO 需要验证 Token 是否有效，有可能用户注销了账户，但是 Token 有效期还未过
                 UserInfoDTO userInfo = JWTUtil.parseJwtToken(token);
-                if (!validateToken(userInfo)) {
-                    ServerHttpResponse response = exchange.getResponse();
-                    response.setStatusCode(HttpStatus.UNAUTHORIZED);
-                    return response.setComplete();
-                }
-
-                ServerHttpRequest.Builder builder = exchange.getRequest().mutate().headers(httpHeaders -> {
-                    httpHeaders.set(UserConstant.USER_ID_KEY, userInfo.getUserId());
-                    httpHeaders.set(UserConstant.USER_NAME_KEY, userInfo.getUsername());
-                    httpHeaders.set(UserConstant.REAL_NAME_KEY, URLEncoder.encode(userInfo.getRealName(), StandardCharsets.UTF_8));
-                    if (Objects.equals(requestPath, DELETION_PATH)) {
-                        httpHeaders.set(UserConstant.USER_TOKEN_KEY, token);
+                return validateToken(token, userInfo).flatMap(valid -> {
+                    if (!valid) {
+                        return unauthorized(exchange.getResponse());
                     }
+                    ServerHttpRequest.Builder builder = exchange.getRequest().mutate().headers(httpHeaders -> {
+                        httpHeaders.set(UserConstant.USER_ID_KEY, userInfo.getUserId());
+                        httpHeaders.set(UserConstant.USER_NAME_KEY, userInfo.getUsername());
+                        httpHeaders.set(UserConstant.REAL_NAME_KEY,
+                                URLEncoder.encode(userInfo.getRealName(), StandardCharsets.UTF_8));
+                        if (Objects.equals(requestPath, DELETION_PATH)) {
+                            httpHeaders.set(UserConstant.USER_TOKEN_KEY, token);
+                        }
+                    });
+                    return chain.filter(exchange.mutate().request(builder.build()).build());
                 });
-                return chain.filter(exchange.mutate().request(builder.build()).build());
             }
             return chain.filter(exchange);
         };
@@ -86,7 +99,23 @@ public class TokenValidateGatewayFilterFactory extends AbstractGatewayFilterFact
         return blackPathPre.stream().anyMatch(requestPath::startsWith);
     }
 
-    private boolean validateToken(UserInfoDTO userInfo) {
-        return userInfo != null;
+    private Mono<Boolean> validateToken(String token, UserInfoDTO userInfo) {
+        if (userInfo == null || StrUtil.isBlank(token)) {
+            return Mono.just(false);
+        }
+        String userServiceName = environment.resolvePlaceholders(USER_SERVICE_NAME);
+        return webClientBuilder.build()
+                .get()
+                .uri("http://" + userServiceName + CHECK_LOGIN_PATH + "?accessToken={accessToken}", token)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Result<Object>>() {
+                })
+                .map(result -> result != null && result.isSuccess() && result.getData() != null)
+                .onErrorReturn(false);
+    }
+
+    private Mono<Void> unauthorized(ServerHttpResponse response) {
+        response.setStatusCode(HttpStatus.UNAUTHORIZED);
+        return response.setComplete();
     }
 }

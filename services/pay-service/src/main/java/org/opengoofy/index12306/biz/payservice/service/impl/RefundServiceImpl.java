@@ -52,7 +52,6 @@ import java.math.BigDecimal;
 import java.util.Date;
 import java.util.Objects;
 
-
 /**
  * 退款接口层实现
  * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：12306）获取项目资料
@@ -71,7 +70,6 @@ public class RefundServiceImpl implements RefundService {
     @Override
     @Transactional
     public RefundRespDTO commonRefund(RefundReqDTO requestParam) {
-        RefundRespDTO refundRespDTO = null;
         LambdaQueryWrapper<PayDO> queryWrapper = Wrappers.lambdaQuery(PayDO.class)
                 .eq(PayDO::getOrderSn, requestParam.getOrderSn());
         PayDO payDO = payMapper.selectOne(queryWrapper);
@@ -80,7 +78,7 @@ public class RefundServiceImpl implements RefundService {
             throw new ServiceException("支付单不存在");
         }
         payDO.setPayAmount(payDO.getTotalAmount() - requestParam.getRefundAmount());
-        //创建退款单
+        // 创建退款单
         RefundCreateDTO refundCreateDTO = BeanUtil.convert(requestParam, RefundCreateDTO.class);
         refundCreateDTO.setPaySn(payDO.getPaySn());
         createRefund(refundCreateDTO);
@@ -119,12 +117,18 @@ public class RefundServiceImpl implements RefundService {
                     .build();
             refundResultCallbackOrderSendProduce.sendMessage(refundResultCallbackOrderEvent);
         }
-        //TODO 暂时返回空实体
-        return refundRespDTO;
+        return RefundRespDTO.builder()
+                .orderSn(requestParam.getOrderSn())
+                .paySn(payDO.getPaySn())
+                .tradeNo(result.getTradeNo())
+                .status(result.getStatus())
+                .refundAmount(new BigDecimal(requestParam.getRefundAmount()))
+                .build();
     }
 
     private void createRefund(RefundCreateDTO requestParam) {
-        Result<TicketOrderDetailRespDTO> queryTicketResult = ticketOrderRemoteService.queryTicketOrderByOrderSn(requestParam.getOrderSn());
+        Result<TicketOrderDetailRespDTO> queryTicketResult = ticketOrderRemoteService
+                .queryTicketOrderByOrderSn(requestParam.getOrderSn());
         if (!queryTicketResult.isSuccess() && Objects.isNull(queryTicketResult.getData())) {
             throw new ServiceException("车票订单不存在");
         }

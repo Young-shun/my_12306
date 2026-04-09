@@ -15,47 +15,22 @@
  * limitations under the License.
  */
 
-package org.opengoofy.index12306.biz.payservice.dto;
+package org.opengoofy.index12306.biz.gatewayservice.config;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
-import java.math.BigDecimal;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
 
 /**
- * 退款详情返回参数实体
- * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：12306）获取项目资料
+ * Gateway load balancer client configuration.
  */
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-public class RefundRespDTO {
+@Configuration
+public class GatewayLoadBalancerConfiguration {
 
-  /**
-   * 订单号
-   */
-  private String orderSn;
-
-  /**
-   * 支付流水号
-   */
-  private String paySn;
-
-  /**
-   * 第三方交易流水号
-   */
-  private String tradeNo;
-
-  /**
-   * 退款状态
-   */
-  private Integer status;
-
-  /**
-   * 本次退款金额
-   */
-  private BigDecimal refundAmount;
+  @Bean
+  @LoadBalanced
+  public WebClient.Builder loadBalancedWebClientBuilder() {
+    return WebClient.builder();
+  }
 }
