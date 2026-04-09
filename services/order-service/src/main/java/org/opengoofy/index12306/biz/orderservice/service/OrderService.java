@@ -19,6 +19,8 @@ package org.opengoofy.index12306.biz.orderservice.service;
 
 import org.opengoofy.index12306.biz.orderservice.dto.domain.OrderStatusReversalDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.req.CancelTicketOrderReqDTO;
+import org.opengoofy.index12306.biz.orderservice.dto.req.PurchaseTicketConflictCheckReqDTO;
+import org.opengoofy.index12306.biz.orderservice.dto.req.RefundCallbackOrderUpdateReqDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.req.TicketOrderCreateReqDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.req.TicketOrderPageQueryReqDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.req.TicketOrderSelfPageQueryReqDTO;
@@ -92,4 +94,14 @@ public interface OrderService {
      * @return 本人车票订单集合
      */
     PageResponse<TicketOrderDetailSelfRespDTO> pageSelfTicketOrder(TicketOrderSelfPageQueryReqDTO requestParam);
+
+    /**
+     * 退款后同步回写订单状态
+     */
+    void refundCallbackOrder(RefundCallbackOrderUpdateReqDTO requestParam);
+
+    /**
+     * 检查乘车时间区间是否冲突
+     */
+    boolean hasTicketConflict(PurchaseTicketConflictCheckReqDTO requestParam);
 }

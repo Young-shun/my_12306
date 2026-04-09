@@ -40,7 +40,8 @@ public interface SeatService extends IService<SeatDO> {
      * @param arrival        到达站
      * @return 可用座位集合
      */
-    List<String> listAvailableSeat(String trainId, String carriageNumber, Integer seatType, String departure, String arrival);
+    List<String> listAvailableSeat(String trainId, String carriageNumber, Integer seatType, String departure,
+            String arrival);
 
     /**
      * 获取列车车厢余票集合
@@ -51,7 +52,8 @@ public interface SeatService extends IService<SeatDO> {
      * @param trainCarriageList 车厢编号集合
      * @return 车厢余票集合
      */
-    List<Integer> listSeatRemainingTicket(String trainId, String departure, String arrival, List<String> trainCarriageList);
+    List<Integer> listSeatRemainingTicket(String trainId, String departure, String arrival,
+            List<String> trainCarriageList);
 
     /**
      * 查询列车有余票的车厢号集合
@@ -73,7 +75,8 @@ public interface SeatService extends IService<SeatDO> {
      * @param seatTypes    座位类型集合
      * @return 座位剩余可用数量
      */
-    List<SeatTypeCountDTO> listSeatTypeCount(Long trainId, String startStation, String endStation, List<Integer> seatTypes);
+    List<SeatTypeCountDTO> listSeatTypeCount(Long trainId, String startStation, String endStation,
+            List<Integer> seatTypes);
 
     /**
      * 锁定选中以及沿途车票状态
@@ -83,7 +86,19 @@ public interface SeatService extends IService<SeatDO> {
      * @param arrival                     到达站
      * @param trainPurchaseTicketRespList 乘车人以及座位信息
      */
-    void lockSeat(String trainId, String departure, String arrival, List<TrainPurchaseTicketRespDTO> trainPurchaseTicketRespList);
+    void lockSeat(String trainId, String departure, String arrival,
+            List<TrainPurchaseTicketRespDTO> trainPurchaseTicketRespList);
+
+    /**
+     * 将锁定座位改为已售
+     *
+     * @param trainId                    列车 ID
+     * @param departure                  出发站
+     * @param arrival                    到达站
+     * @param trainPurchaseTicketResults 乘车人以及座位信息
+     */
+    void markSold(String trainId, String departure, String arrival,
+            List<TrainPurchaseTicketRespDTO> trainPurchaseTicketResults);
 
     /**
      * 解锁选中以及沿途车票状态
@@ -93,5 +108,6 @@ public interface SeatService extends IService<SeatDO> {
      * @param arrival                    到达站
      * @param trainPurchaseTicketResults 乘车人以及座位信息
      */
-    void unlock(String trainId, String departure, String arrival, List<TrainPurchaseTicketRespDTO> trainPurchaseTicketResults);
+    void unlock(String trainId, String departure, String arrival,
+            List<TrainPurchaseTicketRespDTO> trainPurchaseTicketResults);
 }

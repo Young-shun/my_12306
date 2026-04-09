@@ -35,4 +35,9 @@ public class PurchaseTicketPassengerDetailDTO {
      * 座位类型
      */
     private Integer seatType;
+
+    /**
+     * 票种 0：成人 1：儿童 2：学生 3：残疾军人
+     */
+    private Integer ticketType;
 }

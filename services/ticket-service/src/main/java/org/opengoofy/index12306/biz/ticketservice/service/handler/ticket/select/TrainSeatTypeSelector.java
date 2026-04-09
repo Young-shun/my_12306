@@ -31,6 +31,8 @@ import org.opengoofy.index12306.biz.ticketservice.dto.req.PurchaseTicketReqDTO;
 import org.opengoofy.index12306.biz.ticketservice.remote.UserRemoteService;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.PassengerRespDTO;
 import org.opengoofy.index12306.biz.ticketservice.service.SeatService;
+import org.opengoofy.index12306.biz.ticketservice.service.handler.ticket.discount.TicketDiscountStrategyMark;
+import org.opengoofy.index12306.biz.ticketservice.service.handler.ticket.discount.dto.TicketDiscountCalculateDTO;
 import org.opengoofy.index12306.biz.ticketservice.service.handler.ticket.dto.SelectSeatDTO;
 import org.opengoofy.index12306.biz.ticketservice.service.handler.ticket.dto.TrainPurchaseTicketRespDTO;
 import org.opengoofy.index12306.framework.starter.convention.exception.RemoteException;
@@ -42,6 +44,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -68,7 +71,8 @@ public final class TrainSeatTypeSelector {
         List<PurchaseTicketPassengerDetailDTO> passengerDetails = requestParam.getPassengers();
         Map<Integer, List<PurchaseTicketPassengerDetailDTO>> seatTypeMap = passengerDetails.stream()
                 .collect(Collectors.groupingBy(PurchaseTicketPassengerDetailDTO::getSeatType));
-        List<TrainPurchaseTicketRespDTO> actualResult = Collections.synchronizedList(new ArrayList<>(seatTypeMap.size()));
+        List<TrainPurchaseTicketRespDTO> actualResult = Collections
+                .synchronizedList(new ArrayList<>(seatTypeMap.size()));
         if (seatTypeMap.size() > 1) {
             List<Future<List<TrainPurchaseTicketRespDTO>>> futureResults = new ArrayList<>(seatTypeMap.size());
             seatTypeMap.forEach((seatType, passengerSeatDetails) -> {
@@ -87,7 +91,8 @@ public final class TrainSeatTypeSelector {
             });
         } else {
             seatTypeMap.forEach((seatType, passengerSeatDetails) -> {
-                List<TrainPurchaseTicketRespDTO> aggregationResult = distributeSeats(trainType, seatType, requestParam, passengerSeatDetails);
+                List<TrainPurchaseTicketRespDTO> aggregationResult = distributeSeats(trainType, seatType, requestParam,
+                        passengerSeatDetails);
                 actualResult.addAll(aggregationResult);
             });
         }
@@ -101,7 +106,8 @@ public final class TrainSeatTypeSelector {
         List<PassengerRespDTO> passengerRemoteResultList;
         try {
             passengerRemoteResult = userRemoteService.listPassengerQueryByIds(UserContext.getUsername(), passengerIds);
-            if (!passengerRemoteResult.isSuccess() || CollUtil.isEmpty(passengerRemoteResultList = passengerRemoteResult.getData())) {
+            if (!passengerRemoteResult.isSuccess()
+                    || CollUtil.isEmpty(passengerRemoteResultList = passengerRemoteResult.getData())) {
                 throw new RemoteException("用户服务远程调用查询乘车人相关信息错误");
             }
         } catch (Throwable ex) {
@@ -112,6 +118,9 @@ public final class TrainSeatTypeSelector {
             }
             throw ex;
         }
+        Map<String, Integer> passengerTicketTypeMap = new HashMap<>(requestParam.getPassengers().size());
+        requestParam.getPassengers().forEach(passenger -> passengerTicketTypeMap.put(passenger.getPassengerId(),
+                passenger.getTicketType()));
         actualResult.forEach(each -> {
             String passengerId = each.getPassengerId();
             passengerRemoteResultList.stream()
@@ -120,7 +129,8 @@ public final class TrainSeatTypeSelector {
                     .ifPresent(passenger -> {
                         each.setIdCard(passenger.getIdCard());
                         each.setPhone(passenger.getPhone());
-                        each.setUserType(passenger.getDiscountType());
+                        Integer selectedTicketType = passengerTicketTypeMap.get(passengerId);
+                        each.setUserType(selectedTicketType != null ? selectedTicketType : passenger.getDiscountType());
                         each.setIdType(passenger.getIdType());
                         each.setRealName(passenger.getRealName());
                     });
@@ -131,15 +141,22 @@ public final class TrainSeatTypeSelector {
                     .eq(TrainStationPriceDO::getSeatType, each.getSeatType())
                     .select(TrainStationPriceDO::getPrice);
             TrainStationPriceDO trainStationPriceDO = trainStationPriceMapper.selectOne(lambdaQueryWrapper);
-            each.setAmount(trainStationPriceDO.getPrice());
+            if (trainStationPriceDO == null || trainStationPriceDO.getPrice() == null) {
+                throw new ServiceException("列车区间票价不存在，请刷新后重试");
+            }
+            each.setAmount(
+                    calculateTicketAmount(trainStationPriceDO.getPrice(), each.getUserType(), each.getSeatType()));
         });
         // 购买列车中间站点余票如何更新？详细查看：https://nageoffer.com/12306/question
-        seatService.lockSeat(requestParam.getTrainId(), requestParam.getDeparture(), requestParam.getArrival(), actualResult);
+        seatService.lockSeat(requestParam.getTrainId(), requestParam.getDeparture(), requestParam.getArrival(),
+                actualResult);
         return actualResult;
     }
 
-    private List<TrainPurchaseTicketRespDTO> distributeSeats(Integer trainType, Integer seatType, PurchaseTicketReqDTO requestParam, List<PurchaseTicketPassengerDetailDTO> passengerSeatDetails) {
-        String buildStrategyKey = VehicleTypeEnum.findNameByCode(trainType) + VehicleSeatTypeEnum.findNameByCode(seatType);
+    private List<TrainPurchaseTicketRespDTO> distributeSeats(Integer trainType, Integer seatType,
+            PurchaseTicketReqDTO requestParam, List<PurchaseTicketPassengerDetailDTO> passengerSeatDetails) {
+        String buildStrategyKey = VehicleTypeEnum.findNameByCode(trainType)
+                + VehicleSeatTypeEnum.findNameByCode(seatType);
         SelectSeatDTO selectSeatDTO = SelectSeatDTO.builder()
                 .seatType(seatType)
                 .passengerSeatDetails(passengerSeatDetails)
@@ -149,6 +166,25 @@ public final class TrainSeatTypeSelector {
             return abstractStrategyChoose.chooseAndExecuteResp(buildStrategyKey, selectSeatDTO);
         } catch (ServiceException ex) {
             throw new ServiceException("当前车次列车类型暂未适配，请购买G35或G39车次");
+        }
+    }
+
+    private Integer calculateTicketAmount(Integer originAmount, Integer ticketType, Integer seatType) {
+        if (originAmount == null) {
+            return 0;
+        }
+        Integer actualTicketType = ticketType == null ? 0 : ticketType;
+        TicketDiscountCalculateDTO calculateDTO = TicketDiscountCalculateDTO.builder()
+                .originAmount(originAmount)
+                .ticketType(actualTicketType)
+                .seatType(seatType)
+                .build();
+        String mark = TicketDiscountStrategyMark.buildMark(actualTicketType);
+        try {
+            return abstractStrategyChoose.chooseAndExecuteResp(mark, calculateDTO);
+        } catch (ServiceException ex) {
+            // 票种未匹配到策略时，默认回退成人票原价策略。
+            return abstractStrategyChoose.chooseAndExecuteResp(TicketDiscountStrategyMark.buildMark(0), calculateDTO);
         }
     }
 }

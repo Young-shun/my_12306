@@ -57,7 +57,12 @@ public enum OrderItemStatusEnum {
     /**
      * 已改签
      */
-    RESCHEDULED(50, "已改签");
+    RESCHEDULED(50, "已改签"),
+
+    /**
+     * 已出站
+     */
+    ALREADY_ARRIVED(60, "已出站");
 
     @Getter
     private final Integer status;

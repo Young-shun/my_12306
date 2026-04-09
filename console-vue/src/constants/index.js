@@ -4,8 +4,16 @@ const TICKET_TYPE_LIST = [
     value: 0
   },
   {
-    label: '学生票',
+    label: '儿童票',
     value: 1
+  },
+  {
+    label: '学生票',
+    value: 2
+  },
+  {
+    label: '残疾军人票',
+    value: 3
   }
 ]
 
@@ -75,6 +83,10 @@ const TICKET_STATUS_LIST = [
   {
     label: '已改签',
     value: 50
+  },
+  {
+    label: '已出站',
+    value: 60
   }
 ]
 

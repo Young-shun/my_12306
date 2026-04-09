@@ -69,7 +69,8 @@ public interface TicketService extends IService<TicketDO> {
 
     /**
      * 执行购买车票
-     * 被对应购票版本号接口调用 {@link TicketService#purchaseTicketsV1(PurchaseTicketReqDTO)} and {@link TicketService#purchaseTicketsV2(PurchaseTicketReqDTO)}
+     * 被对应购票版本号接口调用 {@link TicketService#purchaseTicketsV1(PurchaseTicketReqDTO)}
+     * and {@link TicketService#purchaseTicketsV2(PurchaseTicketReqDTO)}
      *
      * @param requestParam 车票购买请求参数
      * @return 订单号

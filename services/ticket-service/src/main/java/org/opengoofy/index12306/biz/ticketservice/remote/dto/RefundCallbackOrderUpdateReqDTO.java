@@ -15,53 +15,30 @@
  * limitations under the License.
  */
 
-package org.opengoofy.index12306.biz.ticketservice.common.enums;
+package org.opengoofy.index12306.biz.ticketservice.remote.dto;
 
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
+import lombok.Data;
+
+import java.util.List;
 
 /**
- * 车票状态枚举
- * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：12306）获取项目资料
+ * 退款后同步回写订单请求参数
  */
-@RequiredArgsConstructor
-public enum TicketStatusEnum {
+@Data
+public class RefundCallbackOrderUpdateReqDTO {
 
-    /**
-     * 未支付
-     */
-    UNPAID(0),
+  /**
+   * 订单号
+   */
+  private String orderSn;
 
-    /**
-     * 已支付
-     */
-    PAID(1),
+  /**
+   * 退款类型：0 部分退款 1 全部退款
+   */
+  private Integer refundType;
 
-    /**
-     * 已进站
-     */
-    BOARDED(2),
-
-    /**
-     * 改签
-     */
-    CHANGED(3),
-
-    /**
-     * 退票
-     */
-    REFUNDED(4),
-
-    /**
-     * 已取消
-     */
-    CLOSED(5),
-
-    /**
-     * 已出站
-     */
-    OUT(6);
-
-    @Getter
-    private final Integer code;
+  /**
+   * 部分退款的子订单记录 ID 集合
+   */
+  private List<String> orderItemRecordIds;
 }

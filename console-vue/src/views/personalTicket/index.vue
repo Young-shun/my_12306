@@ -1,15 +1,17 @@
 <template>
   <div style="padding: 20px 0">
-    <Form layout="inline">
-      <FormItem label="乘车日期"><RangePicker></RangePicker></FormItem>
-      <FormItem>
-        <Checkbox>学生票</Checkbox>
+    <Form layout="inline" @submit.prevent>
+      <FormItem label="乘车日期">
+        <RangePicker v-model:value="state.ridingDateRange"></RangePicker>
       </FormItem>
-      <Button type="primary" html-type="submit">查询</Button>
+      <FormItem>
+        <Checkbox v-model:checked="state.studentTicketOnly">学生票</Checkbox>
+      </FormItem>
+      <Button type="primary" @click="handleSearch">查询</Button>
     </Form>
   </div>
-  <div v-if="!loading" class="list-container">
-    <div v-for="item in state.data">
+  <div v-if="!state.loading" class="list-container">
+    <div v-for="item in state.data" :key="item.id || item.orderSn + '_' + item.idCard">
       <BadgeRibbon
         :text="item.ridingDate + getWeekNumber(dayjs(item.ridingDate).day())"
         placement="start"
@@ -52,11 +54,7 @@
               <span class="amount">{{ (item.amount / 100)?.toFixed(2) }}</span>
             </div>
             <div style="font-weight: bolder">
-              {{
-                moment(item?.ridingDate ?? new Date()).isAfter(moment())
-                  ? '未出战'
-                  : '已出站'
-              }}
+              {{ item.ticketStatusName || '未知状态' }}
             </div>
           </div>
           <Divider></Divider>
@@ -76,7 +74,7 @@
       </BadgeRibbon>
     </div>
   </div>
-  <Spin v-else :spinning="true"></Spin>
+  <Spin v-else :spinning="state.loading"></Spin>
   <div style="padding: 10px 0; display: flex; justify-content: end">
     <Pagination
       :current="state.current"
@@ -113,25 +111,42 @@ import { getWeekNumber } from '@/utils'
 import { reactive, watch } from 'vue'
 import { fetchMyTicket } from '@/service'
 import { SEAT_CLASS_TYPE_LIST, DISCOUNTS_TYPE } from '@/constants'
-import moment from 'moment'
 const { RangePicker } = DatePicker
 
 const state = reactive({
   data: [],
-  total: 100,
+  total: 0,
   size: 10,
   current: 1,
-  loading: false
+  loading: false,
+  ridingDateRange: [],
+  studentTicketOnly: false
 })
 const handleFetchMyTicket = (current, size) => {
+  const params = {
+    current,
+    size
+  }
+  if (state.ridingDateRange?.length === 2) {
+    params.startRidingDate = dayjs(state.ridingDateRange[0]).format('YYYY-MM-DD')
+    params.endRidingDate = dayjs(state.ridingDateRange[1]).format('YYYY-MM-DD')
+  }
+  if (state.studentTicketOnly) {
+    params.ticketType = 2
+  }
   state.loading = true
-  fetchMyTicket({ current, size })
+  fetchMyTicket(params)
     .then((res) => {
-      state.data = res.data?.records
-      state.total = res.data?.total
+      state.data = res.data?.records || []
+      state.total = res.data?.total || 0
       state.loading = false
     })
     .catch(() => (state.loading = false))
+}
+
+const handleSearch = () => {
+  state.current = 1
+  handleFetchMyTicket(state.current, state.size)
 }
 
 watch(

@@ -67,18 +67,22 @@ public class OrderItemServiceImpl extends ServiceImpl<OrderItemMapper, OrderItem
         if (orderDO == null) {
             throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_CANAL_UNKNOWN_ERROR);
         }
-        RLock lock = redissonClient.getLock(StrBuilder.create("order:status-reversal:order_sn_").append(requestParam.getOrderSn()).toString());
+        RLock lock = redissonClient.getLock(
+                StrBuilder.create("order:status-reversal:order_sn_").append(requestParam.getOrderSn()).toString());
         if (!lock.tryLock()) {
-            log.warn("订单重复修改状态，状态反转请求参数：{}", JSON.toJSONString(requestParam));
+            throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_CANAL_REPETITION_ERROR);
         }
         try {
-            OrderDO updateOrderDO = new OrderDO();
-            updateOrderDO.setStatus(requestParam.getOrderStatus());
-            LambdaUpdateWrapper<OrderDO> updateWrapper = Wrappers.lambdaUpdate(OrderDO.class)
-                    .eq(OrderDO::getOrderSn, requestParam.getOrderSn());
-            int orderUpdateResult = orderMapper.update(updateOrderDO, updateWrapper);
-            if (orderUpdateResult <= 0) {
-                throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_STATUS_REVERSAL_ERROR);
+            if (requestParam.getOrderStatus() != null
+                    && !java.util.Objects.equals(orderDO.getStatus(), requestParam.getOrderStatus())) {
+                OrderDO updateOrderDO = new OrderDO();
+                updateOrderDO.setStatus(requestParam.getOrderStatus());
+                LambdaUpdateWrapper<OrderDO> updateWrapper = Wrappers.lambdaUpdate(OrderDO.class)
+                        .eq(OrderDO::getOrderSn, requestParam.getOrderSn());
+                int orderUpdateResult = orderMapper.update(updateOrderDO, updateWrapper);
+                if (orderUpdateResult <= 0) {
+                    throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_STATUS_REVERSAL_ERROR);
+                }
             }
             if (CollectionUtil.isNotEmpty(requestParam.getOrderItemDOList())) {
                 List<OrderItemDO> orderItemDOList = requestParam.getOrderItemDOList();
@@ -86,18 +90,41 @@ public class OrderItemServiceImpl extends ServiceImpl<OrderItemMapper, OrderItem
                     orderItemDOList.forEach(o -> {
                         OrderItemDO orderItemDO = new OrderItemDO();
                         orderItemDO.setStatus(requestParam.getOrderItemStatus());
-                        LambdaUpdateWrapper<OrderItemDO> orderItemUpdateWrapper = Wrappers.lambdaUpdate(OrderItemDO.class)
-                                .eq(OrderItemDO::getOrderSn, requestParam.getOrderSn())
-                                .eq(OrderItemDO::getRealName, o.getRealName());
+                        LambdaUpdateWrapper<OrderItemDO> orderItemUpdateWrapper = Wrappers
+                                .lambdaUpdate(OrderItemDO.class)
+                                .eq(OrderItemDO::getOrderSn, requestParam.getOrderSn());
+                        if (o.getId() != null) {
+                            orderItemUpdateWrapper.eq(OrderItemDO::getId, o.getId());
+                        } else {
+                            orderItemUpdateWrapper
+                                    .eq(OrderItemDO::getRealName, o.getRealName())
+                                    .eq(OrderItemDO::getIdCard, o.getIdCard());
+                        }
                         int orderItemUpdateResult = orderItemMapper.update(orderItemDO, orderItemUpdateWrapper);
                         if (orderItemUpdateResult <= 0) {
-                            throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_ITEM_STATUS_REVERSAL_ERROR);
+                            LambdaQueryWrapper<OrderItemDO> existedQueryWrapper = Wrappers
+                                    .lambdaQuery(OrderItemDO.class)
+                                    .eq(OrderItemDO::getOrderSn, requestParam.getOrderSn());
+                            if (o.getId() != null) {
+                                existedQueryWrapper.eq(OrderItemDO::getId, o.getId());
+                            } else {
+                                existedQueryWrapper
+                                        .eq(OrderItemDO::getRealName, o.getRealName())
+                                        .eq(OrderItemDO::getIdCard, o.getIdCard());
+                            }
+                            OrderItemDO existed = orderItemMapper.selectOne(existedQueryWrapper);
+                            if (existed == null || !java.util.Objects.equals(existed.getStatus(),
+                                    requestParam.getOrderItemStatus())) {
+                                throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_ITEM_STATUS_REVERSAL_ERROR);
+                            }
                         }
                     });
                 }
             }
         } finally {
-            lock.unlock();
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
         }
     }
 

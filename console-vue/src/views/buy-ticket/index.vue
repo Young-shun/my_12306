@@ -584,7 +584,7 @@ const handleChooseTicketType = (id, value) => {
       return true
     }
   })
-  state.dataSource[cIndex]['idType'] = value
+  state.dataSource[cIndex]['discountType'] = value
 }
 
 const handleSubmit = () => {
@@ -645,14 +645,16 @@ const handleSubmitBuyTicket = () => {
   let params = { trainId: query?.trainId }
   const passengers = state.dataSource.map((item) => ({
     passengerId: item.id,
-    seatType: item.seatType
+    seatType: item.seatType,
+    ticketType: item.discountType
   }))
   params = {
     ...params,
     passengers,
     chooseSeats: toRaw(state.currentSeatCode),
     departure: state.currTrain?.departure,
-    arrival: state.currTrain?.arrival
+    arrival: state.currTrain?.arrival,
+    departureDate: dayjs(query.departureDate).format('YYYY-MM-DD')
   }
   state.loading = true
   fetchBuyTicket(params)

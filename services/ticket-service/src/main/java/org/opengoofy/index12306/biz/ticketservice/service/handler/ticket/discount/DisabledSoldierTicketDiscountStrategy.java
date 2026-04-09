@@ -15,53 +15,26 @@
  * limitations under the License.
  */
 
-package org.opengoofy.index12306.biz.ticketservice.common.enums;
+package org.opengoofy.index12306.biz.ticketservice.service.handler.ticket.discount;
 
-import lombok.Getter;
-import lombok.RequiredArgsConstructor;
+import org.opengoofy.index12306.biz.ticketservice.service.handler.ticket.discount.dto.TicketDiscountCalculateDTO;
+import org.opengoofy.index12306.framework.starter.designpattern.strategy.AbstractExecuteStrategy;
+import org.springframework.stereotype.Component;
 
 /**
- * 车票状态枚举
- * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：12306）获取项目资料
+ * 残疾军人票折扣策略，全部免费。
  */
-@RequiredArgsConstructor
-public enum TicketStatusEnum {
+@Component
+public class DisabledSoldierTicketDiscountStrategy
+    implements AbstractExecuteStrategy<TicketDiscountCalculateDTO, Integer> {
 
-    /**
-     * 未支付
-     */
-    UNPAID(0),
+  @Override
+  public String mark() {
+    return TicketDiscountStrategyMark.buildMark(3);
+  }
 
-    /**
-     * 已支付
-     */
-    PAID(1),
-
-    /**
-     * 已进站
-     */
-    BOARDED(2),
-
-    /**
-     * 改签
-     */
-    CHANGED(3),
-
-    /**
-     * 退票
-     */
-    REFUNDED(4),
-
-    /**
-     * 已取消
-     */
-    CLOSED(5),
-
-    /**
-     * 已出站
-     */
-    OUT(6);
-
-    @Getter
-    private final Integer code;
+  @Override
+  public Integer executeResp(TicketDiscountCalculateDTO requestParam) {
+    return 0;
+  }
 }

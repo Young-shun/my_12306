@@ -19,6 +19,8 @@ package org.opengoofy.index12306.biz.ticketservice.remote;
 
 import org.opengoofy.index12306.biz.ticketservice.dto.req.CancelTicketOrderReqDTO;
 import org.opengoofy.index12306.biz.ticketservice.dto.req.TicketOrderItemQueryReqDTO;
+import org.opengoofy.index12306.biz.ticketservice.remote.dto.PurchaseTicketConflictCheckReqDTO;
+import org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundCallbackOrderUpdateReqDTO;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.TicketOrderCreateRemoteReqDTO;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.TicketOrderDetailRespDTO;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.TicketOrderPassengerDetailRespDTO;
@@ -47,12 +49,12 @@ public interface TicketOrderRemoteService {
     @GetMapping("/api/order-service/order/ticket/query")
     Result<TicketOrderDetailRespDTO> queryTicketOrderByOrderSn(@RequestParam(value = "orderSn") String orderSn);
 
-
     /**
      * 跟据子订单记录id查询车票子订单详情
      */
     @GetMapping("/api/order-service/order/item/ticket/query")
-    Result<List<TicketOrderPassengerDetailRespDTO>> queryTicketItemOrderById(@SpringQueryMap TicketOrderItemQueryReqDTO requestParam);
+    Result<List<TicketOrderPassengerDetailRespDTO>> queryTicketItemOrderById(
+            @SpringQueryMap TicketOrderItemQueryReqDTO requestParam);
 
     /**
      * 创建车票订单
@@ -80,4 +82,16 @@ public interface TicketOrderRemoteService {
      */
     @PostMapping("/api/order-service/order/ticket/cancel")
     Result<Void> cancelTicketOrder(@RequestBody CancelTicketOrderReqDTO requestParam);
+
+    /**
+     * 退款后同步回写订单状态
+     */
+    @PostMapping("/api/order-service/order/ticket/refund/callback")
+    Result<Boolean> refundCallbackOrder(@RequestBody RefundCallbackOrderUpdateReqDTO requestParam);
+
+    /**
+     * 检查乘车时间区间是否冲突
+     */
+    @PostMapping("/api/order-service/order/ticket/purchase/conflict/check")
+    Result<Boolean> hasPurchaseConflict(@RequestBody PurchaseTicketConflictCheckReqDTO requestParam);
 }

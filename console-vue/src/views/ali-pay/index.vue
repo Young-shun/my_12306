@@ -1,16 +1,19 @@
 <template>
-  <div v-html="decodeURI(query.body)"></div>
+  <div v-if="payBody" v-html="payBody"></div>
+  <div v-else>支付表单为空，请返回订单页重试。</div>
 </template>
 
 <script setup>
-import Vue, { reactive, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 
 const { query } = useRoute()
+const payBody = query?.body ? decodeURIComponent(query.body) : ''
 
 console.log(query.body)
 setTimeout(() => {
-  document.forms[0]?.submit()
+  if (payBody) {
+    document.forms[0]?.submit()
+  }
 }, 100)
 // const state = reactive({
 //   body: ''

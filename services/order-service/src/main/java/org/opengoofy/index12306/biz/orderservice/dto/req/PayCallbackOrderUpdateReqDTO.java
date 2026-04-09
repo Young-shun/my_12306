@@ -15,50 +15,31 @@
  * limitations under the License.
  */
 
-package org.opengoofy.index12306.biz.ticketservice.dto.req;
+package org.opengoofy.index12306.biz.orderservice.dto.req;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
-import org.opengoofy.index12306.biz.ticketservice.dto.domain.PurchaseTicketPassengerDetailDTO;
 
 import java.util.Date;
-import java.util.List;
 
 /**
- * 购票请求入参
+ * 支付成功后同步回写订单请求参数
  * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：12306）获取项目资料
  */
 @Data
-public class PurchaseTicketReqDTO {
+public class PayCallbackOrderUpdateReqDTO {
 
-    /**
-     * 车次 ID
-     */
-    private String trainId;
+  /**
+   * 订单号
+   */
+  private String orderSn;
 
-    /**
-     * 乘车人
-     */
-    private List<PurchaseTicketPassengerDetailDTO> passengers;
+  /**
+   * 付款时间
+   */
+  private Date gmtPayment;
 
-    /**
-     * 选择座位
-     */
-    private List<String> chooseSeats;
-
-    /**
-     * 出发站点
-     */
-    private String departure;
-
-    /**
-     * 到达站点
-     */
-    private String arrival;
-
-    /**
-     * 乘车日期
-     */
-    @JsonFormat(pattern = "yyyy-MM-dd", timezone = "GMT+8")
-    private Date departureDate;
+  /**
+   * 支付渠道
+   */
+  private Integer channel;
 }

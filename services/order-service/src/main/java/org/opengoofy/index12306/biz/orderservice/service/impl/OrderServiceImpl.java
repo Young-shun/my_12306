@@ -18,6 +18,8 @@
 package org.opengoofy.index12306.biz.orderservice.service.impl;
 
 import cn.crane4j.annotation.AutoOperate;
+import cn.hutool.core.date.DatePattern;
+import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.collection.ListUtil;
 import cn.hutool.core.text.StrBuilder;
 import com.alibaba.fastjson2.JSON;
@@ -39,6 +41,9 @@ import org.opengoofy.index12306.biz.orderservice.dao.mapper.OrderItemMapper;
 import org.opengoofy.index12306.biz.orderservice.dao.mapper.OrderMapper;
 import org.opengoofy.index12306.biz.orderservice.dto.domain.OrderStatusReversalDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.req.CancelTicketOrderReqDTO;
+import org.opengoofy.index12306.biz.orderservice.dto.req.PurchaseTicketConflictCheckReqDTO;
+import org.opengoofy.index12306.biz.orderservice.dto.req.RefundCallbackOrderUpdateReqDTO;
+import org.opengoofy.index12306.biz.orderservice.dto.req.TicketOrderItemQueryReqDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.req.TicketOrderCreateReqDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.req.TicketOrderItemCreateReqDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.req.TicketOrderPageQueryReqDTO;
@@ -46,6 +51,7 @@ import org.opengoofy.index12306.biz.orderservice.dto.req.TicketOrderSelfPageQuer
 import org.opengoofy.index12306.biz.orderservice.dto.resp.TicketOrderDetailRespDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.resp.TicketOrderDetailSelfRespDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.resp.TicketOrderPassengerDetailRespDTO;
+import org.opengoofy.index12306.biz.orderservice.dto.domain.OrderItemStatusReversalDTO;
 import org.opengoofy.index12306.biz.orderservice.mq.event.DelayCloseOrderEvent;
 import org.opengoofy.index12306.biz.orderservice.mq.event.PayResultCallbackOrderEvent;
 import org.opengoofy.index12306.biz.orderservice.mq.produce.DelayCloseOrderSendProduce;
@@ -68,8 +74,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 订单服务接口层实现
@@ -97,13 +109,17 @@ public class OrderServiceImpl implements OrderService {
         LambdaQueryWrapper<OrderItemDO> orderItemQueryWrapper = Wrappers.lambdaQuery(OrderItemDO.class)
                 .eq(OrderItemDO::getOrderSn, orderSn);
         List<OrderItemDO> orderItemDOList = orderItemMapper.selectList(orderItemQueryWrapper);
-        result.setPassengerDetails(BeanUtil.convert(orderItemDOList, TicketOrderPassengerDetailRespDTO.class));
+        List<TicketOrderPassengerDetailRespDTO> passengerDetails = BeanUtil.convert(orderItemDOList,
+                TicketOrderPassengerDetailRespDTO.class);
+        passengerDetails.forEach(each -> each.setStatusName(resolveOrderItemStatusName(each.getStatus())));
+        result.setPassengerDetails(passengerDetails);
         return result;
     }
 
     @AutoOperate(type = TicketOrderDetailRespDTO.class, on = "data.records")
     @Override
     public PageResponse<TicketOrderDetailRespDTO> pageTicketOrder(TicketOrderPageQueryReqDTO requestParam) {
+        completeExpiredPaidOrders(requestParam.getUserId());
         LambdaQueryWrapper<OrderDO> queryWrapper = Wrappers.lambdaQuery(OrderDO.class)
                 .eq(OrderDO::getUserId, requestParam.getUserId())
                 .in(OrderDO::getStatus, buildOrderStatusList(requestParam))
@@ -114,9 +130,38 @@ public class OrderServiceImpl implements OrderService {
             LambdaQueryWrapper<OrderItemDO> orderItemQueryWrapper = Wrappers.lambdaQuery(OrderItemDO.class)
                     .eq(OrderItemDO::getOrderSn, each.getOrderSn());
             List<OrderItemDO> orderItemDOList = orderItemMapper.selectList(orderItemQueryWrapper);
-            result.setPassengerDetails(BeanUtil.convert(orderItemDOList, TicketOrderPassengerDetailRespDTO.class));
+            Date now = new Date();
+            if (each.getArrivalTime() != null && now.after(each.getArrivalTime())) {
+                orderItemDOList.forEach(item -> {
+                    if (Objects.equals(item.getStatus(), OrderItemStatusEnum.ALREADY_PAID.getStatus())
+                            || Objects.equals(item.getStatus(), OrderItemStatusEnum.ALREADY_PULL_IN.getStatus())) {
+                        item.setStatus(OrderItemStatusEnum.ALREADY_ARRIVED.getStatus());
+                    }
+                });
+            }
+            List<TicketOrderPassengerDetailRespDTO> passengerDetails = BeanUtil.convert(orderItemDOList,
+                    TicketOrderPassengerDetailRespDTO.class);
+            passengerDetails.forEach(item -> item.setStatusName(resolveOrderItemStatusName(item.getStatus())));
+            result.setPassengerDetails(passengerDetails);
             return result;
         });
+    }
+
+    private void completeExpiredPaidOrders(String userId) {
+        if (userId == null) {
+            return;
+        }
+        Date now = new Date();
+        OrderDO updateOrderDO = new OrderDO();
+        updateOrderDO.setStatus(OrderStatusEnum.COMPLETED.getStatus());
+        LambdaUpdateWrapper<OrderDO> updateWrapper = Wrappers.lambdaUpdate(OrderDO.class)
+                .eq(OrderDO::getUserId, userId)
+                .eq(OrderDO::getStatus, OrderStatusEnum.ALREADY_PAID.getStatus())
+                .lt(OrderDO::getArrivalTime, now);
+        int updateCount = orderMapper.update(updateOrderDO, updateWrapper);
+        if (updateCount > 0) {
+            log.info("分页查询前自动补全历史订单状态，userId={}, updateCount={}", userId, updateCount);
+        }
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -151,7 +196,8 @@ public class OrderServiceImpl implements OrderService {
                     .orderSn(orderSn)
                     .phone(each.getPhone())
                     .seatType(each.getSeatType())
-                    .username(requestParam.getUsername()).amount(each.getAmount()).carriageNumber(each.getCarriageNumber())
+                    .username(requestParam.getUsername()).amount(each.getAmount())
+                    .carriageNumber(each.getCarriageNumber())
                     .idCard(each.getIdCard())
                     .ticketType(each.getTicketType())
                     .idType(each.getIdType())
@@ -213,6 +259,8 @@ public class OrderServiceImpl implements OrderService {
         OrderDO orderDO = orderMapper.selectOne(queryWrapper);
         if (orderDO == null) {
             throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_CANAL_UNKNOWN_ERROR);
+        } else if (Objects.equals(orderDO.getStatus(), OrderStatusEnum.CLOSED.getStatus())) {
+            return true;
         } else if (orderDO.getStatus() != OrderStatusEnum.PENDING_PAYMENT.getStatus()) {
             throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_CANAL_STATUS_ERROR);
         }
@@ -238,7 +286,9 @@ public class OrderServiceImpl implements OrderService {
                 throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_CANAL_ERROR);
             }
         } finally {
-            lock.unlock();
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
         }
         return true;
     }
@@ -250,12 +300,15 @@ public class OrderServiceImpl implements OrderService {
         OrderDO orderDO = orderMapper.selectOne(queryWrapper);
         if (orderDO == null) {
             throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_CANAL_UNKNOWN_ERROR);
+        } else if (Objects.equals(orderDO.getStatus(), requestParam.getOrderStatus())) {
+            return;
         } else if (orderDO.getStatus() != OrderStatusEnum.PENDING_PAYMENT.getStatus()) {
             throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_CANAL_STATUS_ERROR);
         }
-        RLock lock = redissonClient.getLock(StrBuilder.create("order:status-reversal:order_sn_").append(requestParam.getOrderSn()).toString());
+        RLock lock = redissonClient.getLock(
+                StrBuilder.create("order:status-reversal:order_sn_").append(requestParam.getOrderSn()).toString());
         if (!lock.tryLock()) {
-            log.warn("订单重复修改状态，状态反转请求参数：{}", JSON.toJSONString(requestParam));
+            throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_CANAL_REPETITION_ERROR);
         }
         try {
             OrderDO updateOrderDO = new OrderDO();
@@ -275,7 +328,9 @@ public class OrderServiceImpl implements OrderService {
                 throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_STATUS_REVERSAL_ERROR);
             }
         } finally {
-            lock.unlock();
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
         }
     }
 
@@ -292,41 +347,232 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
+    @AutoOperate(type = TicketOrderDetailSelfRespDTO.class, on = "data.records")
     @Override
     public PageResponse<TicketOrderDetailSelfRespDTO> pageSelfTicketOrder(TicketOrderSelfPageQueryReqDTO requestParam) {
-        Result<UserQueryActualRespDTO> userActualResp = userRemoteService.queryActualUserByUsername(UserContext.getUsername());
-        LambdaQueryWrapper<OrderItemPassengerDO> queryWrapper = Wrappers.lambdaQuery(OrderItemPassengerDO.class)
-                .eq(OrderItemPassengerDO::getIdCard, userActualResp.getData().getIdCard())
-                .orderByDesc(OrderItemPassengerDO::getCreateTime);
-        IPage<OrderItemPassengerDO> orderItemPassengerPage = orderPassengerRelationService.page(PageUtil.convert(requestParam), queryWrapper);
-        return PageUtil.convert(orderItemPassengerPage, each -> {
-            LambdaQueryWrapper<OrderDO> orderQueryWrapper = Wrappers.lambdaQuery(OrderDO.class)
-                    .eq(OrderDO::getOrderSn, each.getOrderSn());
-            OrderDO orderDO = orderMapper.selectOne(orderQueryWrapper);
-            LambdaQueryWrapper<OrderItemDO> orderItemQueryWrapper = Wrappers.lambdaQuery(OrderItemDO.class)
-                    .eq(OrderItemDO::getOrderSn, each.getOrderSn())
-                    .eq(OrderItemDO::getIdCard, each.getIdCard());
-            OrderItemDO orderItemDO = orderItemMapper.selectOne(orderItemQueryWrapper);
+        Result<UserQueryActualRespDTO> userActualResp = userRemoteService
+                .queryActualUserByUsername(UserContext.getUsername());
+        if (!userActualResp.isSuccess() || userActualResp.getData() == null) {
+            throw new ServiceException("查询当前用户实名信息失败");
+        }
+        String idCard = userActualResp.getData().getIdCard();
+        Set<String> orderSnSet = listSelfTicketOrderSnSet(requestParam);
+        if (orderSnSet.isEmpty()) {
+            return PageResponse.<TicketOrderDetailSelfRespDTO>builder()
+                    .current(requestParam.getCurrent())
+                    .size(requestParam.getSize())
+                    .total(0L)
+                    .records(List.of())
+                    .build();
+        }
+        LambdaQueryWrapper<OrderItemDO> orderItemQueryWrapper = Wrappers.lambdaQuery(OrderItemDO.class)
+                .eq(OrderItemDO::getIdCard, idCard)
+                .in(OrderItemDO::getOrderSn, orderSnSet)
+                .orderByDesc(OrderItemDO::getCreateTime);
+        if (requestParam.getTicketType() != null) {
+            orderItemQueryWrapper.eq(OrderItemDO::getTicketType, requestParam.getTicketType());
+        }
+        IPage<OrderItemDO> orderItemPage = orderItemMapper.selectPage(PageUtil.convert(requestParam),
+                orderItemQueryWrapper);
+        Set<String> pageOrderSnSet = orderItemPage.getRecords().stream()
+                .map(OrderItemDO::getOrderSn)
+                .collect(Collectors.toSet());
+        if (pageOrderSnSet.isEmpty()) {
+            return PageResponse.<TicketOrderDetailSelfRespDTO>builder()
+                    .current(orderItemPage.getCurrent())
+                    .size(orderItemPage.getSize())
+                    .total(orderItemPage.getTotal())
+                    .records(List.of())
+                    .build();
+        }
+        LambdaQueryWrapper<OrderDO> orderQueryWrapper = Wrappers.lambdaQuery(OrderDO.class)
+                .in(OrderDO::getOrderSn, pageOrderSnSet);
+        Map<String, OrderDO> orderDOMap = orderMapper.selectList(orderQueryWrapper).stream()
+                .collect(Collectors.toMap(OrderDO::getOrderSn, Function.identity(), (left, right) -> left));
+        List<TicketOrderDetailSelfRespDTO> records = orderItemPage.getRecords().stream().map(orderItemDO -> {
+            OrderDO orderDO = orderDOMap.get(orderItemDO.getOrderSn());
+            if (orderDO == null) {
+                return null;
+            }
             TicketOrderDetailSelfRespDTO actualResult = BeanUtil.convert(orderDO, TicketOrderDetailSelfRespDTO.class);
             BeanUtil.convertIgnoreNullAndBlank(orderItemDO, actualResult);
+            Integer ticketStatus = orderItemDO.getStatus();
+            if ((Objects.equals(ticketStatus, OrderItemStatusEnum.ALREADY_PAID.getStatus())
+                    || Objects.equals(ticketStatus, OrderItemStatusEnum.ALREADY_PULL_IN.getStatus()))
+                    && orderDO.getArrivalTime() != null
+                    && new Date().after(orderDO.getArrivalTime())) {
+                ticketStatus = OrderItemStatusEnum.ALREADY_ARRIVED.getStatus();
+            }
+            actualResult.setTicketStatus(ticketStatus);
+            actualResult.setTicketStatusName(resolveOrderItemStatusName(ticketStatus));
             return actualResult;
-        });
+        }).filter(Objects::nonNull).toList();
+        return PageResponse.<TicketOrderDetailSelfRespDTO>builder()
+                .current(orderItemPage.getCurrent())
+                .size(orderItemPage.getSize())
+                .total(orderItemPage.getTotal())
+                .records(records)
+                .build();
+    }
+
+    private Set<String> listSelfTicketOrderSnSet(TicketOrderSelfPageQueryReqDTO requestParam) {
+        LambdaQueryWrapper<OrderDO> orderQueryWrapper = Wrappers.lambdaQuery(OrderDO.class)
+                .eq(OrderDO::getUserId, UserContext.getUserId())
+                .select(OrderDO::getOrderSn);
+        if (requestParam.getStartRidingDate() != null) {
+            orderQueryWrapper.ge(OrderDO::getRidingDate,
+                    DateUtil.format(requestParam.getStartRidingDate(), DatePattern.NORM_DATE_PATTERN));
+        }
+        if (requestParam.getEndRidingDate() != null) {
+            Date endRidingDateNextDay = DateUtil.offsetDay(requestParam.getEndRidingDate(), 1);
+            orderQueryWrapper.lt(OrderDO::getRidingDate,
+                    DateUtil.format(endRidingDateNextDay, DatePattern.NORM_DATE_PATTERN));
+        }
+        List<OrderDO> orderDOList = orderMapper.selectList(orderQueryWrapper);
+        return orderDOList.stream().map(OrderDO::getOrderSn).collect(Collectors.toSet());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void refundCallbackOrder(RefundCallbackOrderUpdateReqDTO requestParam) {
+        if (requestParam.getRefundType() != null && requestParam.getRefundType() == 1) {
+            statusReversal(OrderStatusReversalDTO.builder()
+                    .orderSn(requestParam.getOrderSn())
+                    .orderStatus(OrderStatusEnum.FULL_REFUND.getStatus())
+                    .orderItemStatus(OrderItemStatusEnum.REFUNDED.getStatus())
+                    .build());
+            return;
+        }
+        if (requestParam.getOrderItemRecordIds() == null || requestParam.getOrderItemRecordIds().isEmpty()) {
+            throw new ServiceException("部分退款缺少子订单记录");
+        }
+        TicketOrderItemQueryReqDTO queryReqDTO = new TicketOrderItemQueryReqDTO();
+        queryReqDTO.setOrderSn(requestParam.getOrderSn());
+        try {
+            queryReqDTO.setOrderItemRecordIds(requestParam.getOrderItemRecordIds().stream()
+                    .map(Long::valueOf)
+                    .toList());
+        } catch (NumberFormatException ex) {
+            throw new ServiceException("部分退款子订单记录格式错误");
+        }
+        List<TicketOrderPassengerDetailRespDTO> ticketItems = orderItemService.queryTicketItemOrderById(queryReqDTO);
+        List<OrderItemDO> orderItemDOList = ticketItems.stream().map(each -> {
+            OrderItemDO orderItemDO = new OrderItemDO();
+            if (each.getId() != null) {
+                orderItemDO.setId(Long.valueOf(each.getId()));
+            }
+            orderItemDO.setRealName(each.getRealName());
+            orderItemDO.setIdCard(each.getIdCard());
+            return orderItemDO;
+        }).toList();
+        orderItemService.orderItemStatusReversal(OrderItemStatusReversalDTO.builder()
+                .orderSn(requestParam.getOrderSn())
+                .orderStatus(null)
+                .orderItemStatus(OrderItemStatusEnum.REFUNDED.getStatus())
+                .orderItemDOList(orderItemDOList)
+                .build());
+    }
+
+    @Override
+    public boolean hasTicketConflict(PurchaseTicketConflictCheckReqDTO requestParam) {
+        if (requestParam.getDepartureTime() == null || requestParam.getArrivalTime() == null
+                || requestParam.getRidingDate() == null
+                || requestParam.getIdCardList() == null || requestParam.getIdCardList().isEmpty()) {
+            return false;
+        }
+        log.info("冲突校验输入: ridingDate={}, departureTime={}, arrivalTime={}, idCardList={}",
+                requestParam.getRidingDate(), requestParam.getDepartureTime(), requestParam.getArrivalTime(),
+                requestParam.getIdCardList());
+        // 先通过乘车人关系表按 id_card（分片键）查订单号，避免 t_order_item 无分片键导致的全路由。
+        LambdaQueryWrapper<OrderItemPassengerDO> passengerQueryWrapper = Wrappers
+                .lambdaQuery(OrderItemPassengerDO.class)
+                .in(OrderItemPassengerDO::getIdCard, requestParam.getIdCardList())
+                .select(OrderItemPassengerDO::getOrderSn);
+        List<OrderItemPassengerDO> orderPassengers = orderPassengerRelationService.list(passengerQueryWrapper);
+        if (orderPassengers == null || orderPassengers.isEmpty()) {
+            return false;
+        }
+        Set<String> orderSnSet = orderPassengers.stream().map(OrderItemPassengerDO::getOrderSn)
+                .collect(Collectors.toSet());
+        if (orderSnSet.isEmpty()) {
+            return false;
+        }
+        LambdaQueryWrapper<OrderDO> orderQueryWrapper = Wrappers.lambdaQuery(OrderDO.class)
+                .in(OrderDO::getOrderSn, orderSnSet)
+                .in(OrderDO::getStatus,
+                        OrderStatusEnum.PENDING_PAYMENT.getStatus(),
+                        OrderStatusEnum.ALREADY_PAID.getStatus())
+                .select(OrderDO::getRidingDate, OrderDO::getDepartureTime, OrderDO::getArrivalTime);
+        List<OrderDO> orderDOList = orderMapper.selectList(orderQueryWrapper);
+        Date targetDepartureTime = requestParam.getDepartureTime();
+        Date targetArrivalTime = requestParam.getArrivalTime();
+        Date targetRidingDate = requestParam.getRidingDate();
+        List<OrderDO> sameDayOrders = orderDOList.stream()
+                .filter(each -> isSameDay(each.getRidingDate(), targetRidingDate))
+                .toList();
+        log.info("冲突校验候选订单: allOrderCount={}, sameDayOrderCount={}, sameDayOrders={}",
+                orderDOList.size(),
+                sameDayOrders.size(),
+                sameDayOrders.stream().map(each -> StrBuilder.create()
+                        .append("[ridingDate=").append(each.getRidingDate())
+                        .append(", departureTime=").append(each.getDepartureTime())
+                        .append(", arrivalTime=").append(each.getArrivalTime())
+                        .append("]").toString()).toList());
+        boolean conflict = sameDayOrders.stream().anyMatch(each -> isTimeOverlap(
+                each.getDepartureTime(),
+                each.getArrivalTime(),
+                targetDepartureTime,
+                targetArrivalTime));
+        log.info("冲突校验结果: conflict={}", conflict);
+        return conflict;
+    }
+
+    private boolean isTimeOverlap(Date startA, Date endA, Date startB, Date endB) {
+        if (startA == null || endA == null || startB == null || endB == null) {
+            return false;
+        }
+        long startATime = startA.getTime();
+        long endATime = endA.getTime();
+        long startBTime = startB.getTime();
+        long endBTime = endB.getTime();
+        return startATime < endBTime && startBTime < endATime;
+    }
+
+    private boolean isSameDay(Date first, Date second) {
+        if (first == null || second == null) {
+            return false;
+        }
+        Calendar c1 = Calendar.getInstance();
+        c1.setTime(first);
+        Calendar c2 = Calendar.getInstance();
+        c2.setTime(second);
+        return c1.get(Calendar.YEAR) == c2.get(Calendar.YEAR)
+                && c1.get(Calendar.DAY_OF_YEAR) == c2.get(Calendar.DAY_OF_YEAR);
+    }
+
+    private String resolveOrderItemStatusName(Integer ticketStatus) {
+        if (ticketStatus == null) {
+            return null;
+        }
+        for (OrderItemStatusEnum each : OrderItemStatusEnum.values()) {
+            if (Objects.equals(each.getStatus(), ticketStatus)) {
+                return each.getStatusName();
+            }
+        }
+        return null;
     }
 
     private List<Integer> buildOrderStatusList(TicketOrderPageQueryReqDTO requestParam) {
         List<Integer> result = new ArrayList<>();
         switch (requestParam.getStatusType()) {
             case 0 -> result = ListUtil.of(
-                    OrderStatusEnum.PENDING_PAYMENT.getStatus()
-            );
+                    OrderStatusEnum.PENDING_PAYMENT.getStatus());
             case 1 -> result = ListUtil.of(
                     OrderStatusEnum.ALREADY_PAID.getStatus(),
                     OrderStatusEnum.PARTIAL_REFUND.getStatus(),
-                    OrderStatusEnum.FULL_REFUND.getStatus()
-            );
+                    OrderStatusEnum.FULL_REFUND.getStatus());
             case 2 -> result = ListUtil.of(
-                    OrderStatusEnum.COMPLETED.getStatus()
-            );
+                    OrderStatusEnum.COMPLETED.getStatus());
         }
         return result;
     }

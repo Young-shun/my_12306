@@ -19,6 +19,9 @@ package org.opengoofy.index12306.biz.orderservice.dto.req;
 
 import lombok.Data;
 import org.opengoofy.index12306.framework.starter.convention.page.PageRequest;
+import org.springframework.format.annotation.DateTimeFormat;
+
+import java.util.Date;
 
 /**
  * 本人车票订单分页查询
@@ -26,4 +29,21 @@ import org.opengoofy.index12306.framework.starter.convention.page.PageRequest;
  */
 @Data
 public class TicketOrderSelfPageQueryReqDTO extends PageRequest {
+
+  /**
+   * 乘车起始日期
+   */
+  @DateTimeFormat(pattern = "yyyy-MM-dd")
+  private Date startRidingDate;
+
+  /**
+   * 乘车结束日期
+   */
+  @DateTimeFormat(pattern = "yyyy-MM-dd")
+  private Date endRidingDate;
+
+  /**
+   * 车票类型（学生票：2）
+   */
+  private Integer ticketType;
 }

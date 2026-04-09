@@ -15,50 +15,36 @@
  * limitations under the License.
  */
 
-package org.opengoofy.index12306.biz.ticketservice.dto.req;
+package org.opengoofy.index12306.biz.ticketservice.remote.dto;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
-import org.opengoofy.index12306.biz.ticketservice.dto.domain.PurchaseTicketPassengerDetailDTO;
 
 import java.util.Date;
 import java.util.List;
 
 /**
- * 购票请求入参
- * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：12306）获取项目资料
+ * 购票时间区间冲突检查请求参数
  */
 @Data
-public class PurchaseTicketReqDTO {
+public class PurchaseTicketConflictCheckReqDTO {
 
-    /**
-     * 车次 ID
-     */
-    private String trainId;
+  /**
+   * 乘车人证件号集合
+   */
+  private List<String> idCardList;
 
-    /**
-     * 乘车人
-     */
-    private List<PurchaseTicketPassengerDetailDTO> passengers;
+  /**
+   * 当前拟购买车票的出发时间
+   */
+  private Date departureTime;
 
-    /**
-     * 选择座位
-     */
-    private List<String> chooseSeats;
+  /**
+   * 当前拟购买车票的到达时间
+   */
+  private Date arrivalTime;
 
-    /**
-     * 出发站点
-     */
-    private String departure;
-
-    /**
-     * 到达站点
-     */
-    private String arrival;
-
-    /**
-     * 乘车日期
-     */
-    @JsonFormat(pattern = "yyyy-MM-dd", timezone = "GMT+8")
-    private Date departureDate;
+  /**
+   * 当前拟购买车票的乘车日期
+   */
+  private Date ridingDate;
 }

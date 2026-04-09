@@ -337,16 +337,31 @@ const handlePay = (channel) => {
     tradeType: 0,
     orderSn: query.sn,
     totalAmount: totalAmount.value,
-    outOrderSn: query.orderSn,
+    outOrderSn: query.sn,
     subject: `${state.currentInfo.departure}-${state.currentInfo.arrival}`
   }
   fetchPay(body).then((res) => {
-    state.html = res.data?.body
+    if (!res?.success) {
+      state.isPayingOpen = false
+      state.isInitiatePayment = false
+      return message.error(res?.message || '支付发起失败，请稍后重试')
+    }
+    const payBody = res?.data?.body
+    if (!payBody) {
+      state.isPayingOpen = false
+      state.isInitiatePayment = false
+      return message.error('支付发起失败，未获取到支付表单')
+    }
+    state.html = payBody
     state.loading = true
     setTimeout(() => {
       state.loading = false
-      window.open(`/aliPay?body=${encodeURIComponent(res.data?.body)}`)
+      window.open(`/aliPay?body=${encodeURIComponent(payBody)}`)
     }, 500)
+  }).catch(() => {
+    state.isPayingOpen = false
+    state.isInitiatePayment = false
+    message.error('支付发起失败，请检查服务状态后重试')
   })
 }
 

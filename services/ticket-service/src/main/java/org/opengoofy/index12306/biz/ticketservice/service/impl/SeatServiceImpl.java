@@ -55,7 +55,8 @@ public class SeatServiceImpl extends ServiceImpl<SeatMapper, SeatDO> implements 
     private final DistributedCache distributedCache;
 
     @Override
-    public List<String> listAvailableSeat(String trainId, String carriageNumber, Integer seatType, String departure, String arrival) {
+    public List<String> listAvailableSeat(String trainId, String carriageNumber, Integer seatType, String departure,
+            String arrival) {
         LambdaQueryWrapper<SeatDO> queryWrapper = Wrappers.lambdaQuery(SeatDO.class)
                 .eq(SeatDO::getTrainId, trainId)
                 .eq(SeatDO::getCarriageNumber, carriageNumber)
@@ -69,14 +70,16 @@ public class SeatServiceImpl extends ServiceImpl<SeatMapper, SeatDO> implements 
     }
 
     @Override
-    public List<Integer> listSeatRemainingTicket(String trainId, String departure, String arrival, List<String> trainCarriageList) {
+    public List<Integer> listSeatRemainingTicket(String trainId, String departure, String arrival,
+            List<String> trainCarriageList) {
         String keySuffix = StrUtil.join("_", trainId, departure, arrival);
         if (distributedCache.hasKey(TRAIN_STATION_CARRIAGE_REMAINING_TICKET + keySuffix)) {
             StringRedisTemplate stringRedisTemplate = (StringRedisTemplate) distributedCache.getInstance();
-            List<Object> trainStationCarriageRemainingTicket =
-                    stringRedisTemplate.opsForHash().multiGet(TRAIN_STATION_CARRIAGE_REMAINING_TICKET + keySuffix, Arrays.asList(trainCarriageList.toArray()));
+            List<Object> trainStationCarriageRemainingTicket = stringRedisTemplate.opsForHash().multiGet(
+                    TRAIN_STATION_CARRIAGE_REMAINING_TICKET + keySuffix, Arrays.asList(trainCarriageList.toArray()));
             if (CollUtil.isNotEmpty(trainStationCarriageRemainingTicket)) {
-                return trainStationCarriageRemainingTicket.stream().map(each -> Integer.parseInt(each.toString())).collect(Collectors.toList());
+                return trainStationCarriageRemainingTicket.stream().map(each -> Integer.parseInt(each.toString()))
+                        .collect(Collectors.toList());
             }
         }
         SeatDO seatDO = SeatDO.builder()
@@ -88,7 +91,8 @@ public class SeatServiceImpl extends ServiceImpl<SeatMapper, SeatDO> implements 
     }
 
     @Override
-    public List<String> listUsableCarriageNumber(String trainId, Integer carriageType, String departure, String arrival) {
+    public List<String> listUsableCarriageNumber(String trainId, Integer carriageType, String departure,
+            String arrival) {
         LambdaQueryWrapper<SeatDO> queryWrapper = Wrappers.lambdaQuery(SeatDO.class)
                 .eq(SeatDO::getTrainId, trainId)
                 .eq(SeatDO::getSeatType, carriageType)
@@ -102,12 +106,14 @@ public class SeatServiceImpl extends ServiceImpl<SeatMapper, SeatDO> implements 
     }
 
     @Override
-    public List<SeatTypeCountDTO> listSeatTypeCount(Long trainId, String startStation, String endStation, List<Integer> seatTypes) {
+    public List<SeatTypeCountDTO> listSeatTypeCount(Long trainId, String startStation, String endStation,
+            List<Integer> seatTypes) {
         return seatMapper.listSeatTypeCount(trainId, startStation, endStation, seatTypes);
     }
 
     @Override
-    public void lockSeat(String trainId, String departure, String arrival, List<TrainPurchaseTicketRespDTO> trainPurchaseTicketRespList) {
+    public void lockSeat(String trainId, String departure, String arrival,
+            List<TrainPurchaseTicketRespDTO> trainPurchaseTicketRespList) {
         List<RouteDTO> routeList = trainStationService.listTakeoutTrainStationRoute(trainId, departure, arrival);
         trainPurchaseTicketRespList.forEach(each -> routeList.forEach(item -> {
             LambdaUpdateWrapper<SeatDO> updateWrapper = Wrappers.lambdaUpdate(SeatDO.class)
@@ -124,7 +130,26 @@ public class SeatServiceImpl extends ServiceImpl<SeatMapper, SeatDO> implements 
     }
 
     @Override
-    public void unlock(String trainId, String departure, String arrival, List<TrainPurchaseTicketRespDTO> trainPurchaseTicketResults) {
+    public void markSold(String trainId, String departure, String arrival,
+            List<TrainPurchaseTicketRespDTO> trainPurchaseTicketResults) {
+        List<RouteDTO> routeList = trainStationService.listTakeoutTrainStationRoute(trainId, departure, arrival);
+        trainPurchaseTicketResults.forEach(each -> routeList.forEach(item -> {
+            LambdaUpdateWrapper<SeatDO> updateWrapper = Wrappers.lambdaUpdate(SeatDO.class)
+                    .eq(SeatDO::getTrainId, trainId)
+                    .eq(SeatDO::getCarriageNumber, each.getCarriageNumber())
+                    .eq(SeatDO::getStartStation, item.getStartStation())
+                    .eq(SeatDO::getEndStation, item.getEndStation())
+                    .eq(SeatDO::getSeatNumber, each.getSeatNumber());
+            SeatDO updateSeatDO = SeatDO.builder()
+                    .seatStatus(SeatStatusEnum.SOLD.getCode())
+                    .build();
+            seatMapper.update(updateSeatDO, updateWrapper);
+        }));
+    }
+
+    @Override
+    public void unlock(String trainId, String departure, String arrival,
+            List<TrainPurchaseTicketRespDTO> trainPurchaseTicketResults) {
         List<RouteDTO> routeList = trainStationService.listTakeoutTrainStationRoute(trainId, departure, arrival);
         trainPurchaseTicketResults.forEach(each -> routeList.forEach(item -> {
             LambdaUpdateWrapper<SeatDO> updateWrapper = Wrappers.lambdaUpdate(SeatDO.class)

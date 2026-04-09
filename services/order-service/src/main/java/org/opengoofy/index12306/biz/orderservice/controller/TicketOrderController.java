@@ -17,12 +17,19 @@
 
 package org.opengoofy.index12306.biz.orderservice.controller;
 
+import org.opengoofy.index12306.biz.orderservice.common.enums.OrderItemStatusEnum;
+import org.opengoofy.index12306.biz.orderservice.common.enums.OrderStatusEnum;
+import org.opengoofy.index12306.biz.orderservice.dto.domain.OrderStatusReversalDTO;
 import lombok.RequiredArgsConstructor;
 import org.opengoofy.index12306.biz.orderservice.dto.req.CancelTicketOrderReqDTO;
+import org.opengoofy.index12306.biz.orderservice.dto.req.PayCallbackOrderUpdateReqDTO;
+import org.opengoofy.index12306.biz.orderservice.dto.req.PurchaseTicketConflictCheckReqDTO;
+import org.opengoofy.index12306.biz.orderservice.dto.req.RefundCallbackOrderUpdateReqDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.req.TicketOrderCreateReqDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.req.TicketOrderItemQueryReqDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.req.TicketOrderPageQueryReqDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.req.TicketOrderSelfPageQueryReqDTO;
+import org.opengoofy.index12306.biz.orderservice.mq.event.PayResultCallbackOrderEvent;
 import org.opengoofy.index12306.biz.orderservice.dto.resp.TicketOrderDetailRespDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.resp.TicketOrderDetailSelfRespDTO;
 import org.opengoofy.index12306.biz.orderservice.dto.resp.TicketOrderPassengerDetailRespDTO;
@@ -62,7 +69,8 @@ public class TicketOrderController {
      * 根据子订单记录id查询车票子订单详情
      */
     @GetMapping("/api/order-service/order/item/ticket/query")
-    public Result<List<TicketOrderPassengerDetailRespDTO>> queryTicketItemOrderById(TicketOrderItemQueryReqDTO requestParam) {
+    public Result<List<TicketOrderPassengerDetailRespDTO>> queryTicketItemOrderById(
+            TicketOrderItemQueryReqDTO requestParam) {
         return Results.success(orderItemService.queryTicketItemOrderById(requestParam));
     }
 
@@ -78,7 +86,8 @@ public class TicketOrderController {
      * 分页查询本人车票订单
      */
     @GetMapping("/api/order-service/order/ticket/self/page")
-    public Result<PageResponse<TicketOrderDetailSelfRespDTO>> pageSelfTicketOrder(TicketOrderSelfPageQueryReqDTO requestParam) {
+    public Result<PageResponse<TicketOrderDetailSelfRespDTO>> pageSelfTicketOrder(
+            TicketOrderSelfPageQueryReqDTO requestParam) {
         return Results.success(orderService.pageSelfTicketOrder(requestParam));
     }
 
@@ -104,5 +113,40 @@ public class TicketOrderController {
     @PostMapping("/api/order-service/order/ticket/cancel")
     public Result<Boolean> cancelTickOrder(@RequestBody CancelTicketOrderReqDTO requestParam) {
         return Results.success(orderService.cancelTickOrder(requestParam));
+    }
+
+    /**
+     * 支付成功后同步回写订单状态
+     */
+    @PostMapping("/api/order-service/order/ticket/pay/callback")
+    public Result<Boolean> payCallbackOrder(@RequestBody PayCallbackOrderUpdateReqDTO requestParam) {
+        orderService.statusReversal(OrderStatusReversalDTO.builder()
+                .orderSn(requestParam.getOrderSn())
+                .orderStatus(OrderStatusEnum.ALREADY_PAID.getStatus())
+                .orderItemStatus(OrderItemStatusEnum.ALREADY_PAID.getStatus())
+                .build());
+        PayResultCallbackOrderEvent callbackEvent = new PayResultCallbackOrderEvent();
+        callbackEvent.setOrderSn(requestParam.getOrderSn());
+        callbackEvent.setGmtPayment(requestParam.getGmtPayment());
+        callbackEvent.setChannel(requestParam.getChannel());
+        orderService.payCallbackOrder(callbackEvent);
+        return Results.success(Boolean.TRUE);
+    }
+
+    /**
+     * 退款后同步回写订单状态
+     */
+    @PostMapping("/api/order-service/order/ticket/refund/callback")
+    public Result<Boolean> refundCallbackOrder(@RequestBody RefundCallbackOrderUpdateReqDTO requestParam) {
+        orderService.refundCallbackOrder(requestParam);
+        return Results.success(Boolean.TRUE);
+    }
+
+    /**
+     * 检查乘车时间区间是否冲突
+     */
+    @PostMapping("/api/order-service/order/ticket/purchase/conflict/check")
+    public Result<Boolean> hasPurchaseConflict(@RequestBody PurchaseTicketConflictCheckReqDTO requestParam) {
+        return Results.success(orderService.hasTicketConflict(requestParam));
     }
 }
