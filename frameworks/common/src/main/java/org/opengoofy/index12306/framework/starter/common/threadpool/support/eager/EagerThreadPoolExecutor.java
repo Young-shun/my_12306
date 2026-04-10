@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -26,7 +26,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 快速消费线程池
- * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：12306）获取项目资料
  */
 public class EagerThreadPoolExecutor extends ThreadPoolExecutor {
 
