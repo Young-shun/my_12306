@@ -1,0 +1,61 @@
+{
+  "groups": [
+    {
+      "name": "pay",
+      "type": "java.lang.Object",
+      "sourceType": "org.opengoofy.index12306.biz.payservice.config.AliPayProperties"
+    },
+    {
+      "name": "pay.alipay",
+      "type": "org.opengoofy.index12306.biz.payservice.config.AliPayProperties",
+      "sourceType": "org.opengoofy.index12306.biz.payservice.config.AliPayProperties"
+    }
+  ],
+  "properties": [
+    {
+      "name": "pay.alipay.app-id",
+      "type": "java.lang.String",
+      "description": "Alipay application id."
+    },
+    {
+      "name": "pay.alipay.private-key",
+      "type": "java.lang.String",
+      "description": "Merchant private key in PKCS8 format."
+    },
+    {
+      "name": "pay.alipay.alipay-public-key",
+      "type": "java.lang.String",
+      "description": "Alipay platform public key."
+    },
+    {
+      "name": "pay.alipay.app-public-key",
+      "type": "java.lang.String",
+      "description": "Application public key paired with private key (optional for local verification)."
+    },
+    {
+      "name": "pay.alipay.server-url",
+      "type": "java.lang.String",
+      "description": "Alipay gateway URL."
+    },
+    {
+      "name": "pay.alipay.notify-url",
+      "type": "java.lang.String",
+      "description": "Async callback URL."
+    },
+    {
+      "name": "pay.alipay.format",
+      "type": "java.lang.String",
+      "description": "Request format, usually json."
+    },
+    {
+      "name": "pay.alipay.charset",
+      "type": "java.lang.String",
+      "description": "Character set, usually UTF-8."
+    },
+    {
+      "name": "pay.alipay.sign-type",
+      "type": "java.lang.String",
+      "description": "Sign algorithm, usually RSA2."
+    }
+  ]
+}

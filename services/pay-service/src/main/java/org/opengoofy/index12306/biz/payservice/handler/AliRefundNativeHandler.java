@@ -33,12 +33,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.opengoofy.index12306.biz.payservice.common.enums.PayChannelEnum;
 import org.opengoofy.index12306.biz.payservice.common.enums.PayTradeTypeEnum;
 import org.opengoofy.index12306.biz.payservice.common.enums.TradeStatusEnum;
+import org.opengoofy.index12306.biz.payservice.config.AliPayConfigBuilder;
 import org.opengoofy.index12306.biz.payservice.config.AliPayProperties;
 import org.opengoofy.index12306.biz.payservice.dto.base.AliRefundRequest;
 import org.opengoofy.index12306.biz.payservice.dto.base.RefundRequest;
 import org.opengoofy.index12306.biz.payservice.dto.base.RefundResponse;
 import org.opengoofy.index12306.biz.payservice.handler.base.AbstractRefundHandler;
-import org.opengoofy.index12306.framework.starter.common.toolkit.BeanUtil;
 import org.opengoofy.index12306.framework.starter.convention.exception.ServiceException;
 import org.opengoofy.index12306.framework.starter.designpattern.strategy.AbstractExecuteStrategy;
 import org.opengoofy.index12306.framework.starter.distributedid.toolkit.SnowflakeIdUtil;
@@ -55,7 +55,8 @@ import java.math.BigDecimal;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class AliRefundNativeHandler extends AbstractRefundHandler implements AbstractExecuteStrategy<RefundRequest, RefundResponse> {
+public class AliRefundNativeHandler extends AbstractRefundHandler
+        implements AbstractExecuteStrategy<RefundRequest, RefundResponse> {
 
     private final AliPayProperties aliPayProperties;
 
@@ -63,12 +64,12 @@ public class AliRefundNativeHandler extends AbstractRefundHandler implements Abs
 
     private final static String FUND_CHANGE = "Y";
 
-    @Retryable(value = {ServiceException.class}, maxAttempts = 3, backoff = @Backoff(delay = 1000, multiplier = 1.5))
+    @Retryable(value = { ServiceException.class }, maxAttempts = 3, backoff = @Backoff(delay = 1000, multiplier = 1.5))
     @SneakyThrows(value = AlipayApiException.class)
     @Override
     public RefundResponse refund(RefundRequest payRequest) {
         AliRefundRequest aliRefundRequest = payRequest.getAliRefundRequest();
-        AlipayConfig alipayConfig = BeanUtil.convert(aliPayProperties, AlipayConfig.class);
+        AlipayConfig alipayConfig = AliPayConfigBuilder.build(aliPayProperties);
         AlipayClient alipayClient = new DefaultAlipayClient(alipayConfig);
         AlipayTradeRefundModel model = new AlipayTradeRefundModel();
         model.setOutTradeNo(aliRefundRequest.getOrderSn());
@@ -87,7 +88,8 @@ public class AliRefundNativeHandler extends AbstractRefundHandler implements Abs
                     aliRefundRequest.getTradeNo(),
                     aliRefundRequest.getPayAmount(),
                     responseJson);
-            if (!StrUtil.equals(SUCCESS_CODE, response.getCode()) || !StrUtil.equals(FUND_CHANGE, response.getFundChange())) {
+            if (!StrUtil.equals(SUCCESS_CODE, response.getCode())
+                    || !StrUtil.equals(FUND_CHANGE, response.getFundChange())) {
                 throw new ServiceException("退款失败");
             }
             return new RefundResponse(TradeStatusEnum.TRADE_CLOSED.tradeCode(), response.getTradeNo());

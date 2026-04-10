@@ -32,12 +32,12 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.opengoofy.index12306.biz.payservice.common.enums.PayChannelEnum;
 import org.opengoofy.index12306.biz.payservice.common.enums.PayTradeTypeEnum;
+import org.opengoofy.index12306.biz.payservice.config.AliPayConfigBuilder;
 import org.opengoofy.index12306.biz.payservice.config.AliPayProperties;
 import org.opengoofy.index12306.biz.payservice.dto.base.AliPayRequest;
 import org.opengoofy.index12306.biz.payservice.dto.base.PayRequest;
 import org.opengoofy.index12306.biz.payservice.dto.base.PayResponse;
 import org.opengoofy.index12306.biz.payservice.handler.base.AbstractPayHandler;
-import org.opengoofy.index12306.framework.starter.common.toolkit.BeanUtil;
 import org.opengoofy.index12306.framework.starter.convention.exception.ServiceException;
 import org.opengoofy.index12306.framework.starter.designpattern.strategy.AbstractExecuteStrategy;
 import org.springframework.retry.annotation.Backoff;
@@ -51,7 +51,8 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class AliPayNativeHandler extends AbstractPayHandler implements AbstractExecuteStrategy<PayRequest, PayResponse> {
+public class AliPayNativeHandler extends AbstractPayHandler
+        implements AbstractExecuteStrategy<PayRequest, PayResponse> {
 
     private final AliPayProperties aliPayProperties;
 
@@ -60,7 +61,7 @@ public class AliPayNativeHandler extends AbstractPayHandler implements AbstractE
     @Retryable(value = ServiceException.class, maxAttempts = 3, backoff = @Backoff(delay = 1000, multiplier = 1.5))
     public PayResponse pay(PayRequest payRequest) {
         AliPayRequest aliPayRequest = payRequest.getAliPayRequest();
-        AlipayConfig alipayConfig = BeanUtil.convert(aliPayProperties, AlipayConfig.class);
+        AlipayConfig alipayConfig = AliPayConfigBuilder.build(aliPayProperties);
         AlipayClient alipayClient = new DefaultAlipayClient(alipayConfig);
         AlipayTradePagePayModel model = new AlipayTradePagePayModel();
         model.setOutTradeNo(aliPayRequest.getOrderSn());

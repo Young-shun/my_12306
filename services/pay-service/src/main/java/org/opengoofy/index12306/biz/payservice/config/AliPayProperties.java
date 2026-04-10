@@ -48,6 +48,11 @@ public class AliPayProperties {
     private String alipayPublicKey;
 
     /**
+     * 应用公钥（可选，用于本地校验 privateKey 是否配对）
+     */
+    private String appPublicKey;
+
+    /**
      * 网关地址
      * 线上：https://openapi.alipay.com/gateway.do
      * 沙箱：https://openapi.alipaydev.com/gateway.do
