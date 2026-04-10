@@ -79,11 +79,21 @@ public class AliPayNativeHandler extends AbstractPayHandler
                     aliPayRequest.getTotalAmount(),
                     JSONObject.toJSONString(response));
             if (!response.isSuccess()) {
-                throw new ServiceException("调用支付宝发起支付异常");
+                log.error("调用支付宝发起支付失败，code={} subCode={} subMsg={} body={}",
+                        response.getCode(),
+                        response.getSubCode(),
+                        response.getSubMsg(),
+                        response.getBody());
+                throw new ServiceException(StrUtil.blankToDefault(response.getSubMsg(), "调用支付宝发起支付异常"));
             }
-            return new PayResponse(StrUtil.replace(StrUtil.replace(response.getBody(), "\"", "'"), "\n", ""));
+            return new PayResponse(response.getBody());
         } catch (AlipayApiException ex) {
-            throw new ServiceException("调用支付宝支付异常");
+            log.error("调用支付宝支付异常，errCode={} errMsg={} message={}",
+                    ex.getErrCode(),
+                    ex.getErrMsg(),
+                    ex.getMessage(),
+                    ex);
+            throw new ServiceException(StrUtil.blankToDefault(ex.getErrMsg(), "调用支付宝支付异常"));
         }
     }
 

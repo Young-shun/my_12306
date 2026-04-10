@@ -47,13 +47,17 @@ public final class AliPayConfigBuilder {
     return StrUtil.replace(
         StrUtil.replace(
             StrUtil.replace(
-                StrUtil.replace(StrUtil.trim(key), "-----BEGIN PRIVATE KEY-----", ""),
+                StrUtil.replace(
+                    StrUtil.replace(StrUtil.trim(key), "-----BEGIN PRIVATE KEY-----", ""),
+                    "-----BEGIN RSA PRIVATE KEY-----",
+                    ""),
                 "-----END PRIVATE KEY-----",
                 ""),
             "-----BEGIN PUBLIC KEY-----",
             ""),
         "-----END PUBLIC KEY-----",
         "")
+        .replace("-----END RSA PRIVATE KEY-----", "")
         .replaceAll("\\s+", "");
   }
 

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -15,52 +15,30 @@
  * limitations under the License.
  */
 
-package org.opengoofy.index12306.biz.payservice.dto.base;
+package org.opengoofy.index12306.biz.payservice.remote.dto;
 
 import lombok.Data;
-import org.opengoofy.index12306.biz.payservice.common.enums.PayChannelEnum;
 
-import java.math.BigDecimal;
 import java.util.Date;
 
 /**
- * 支付宝回调请求入参
+ * 支付成功后同步回写订单请求参数
  */
 @Data
-public final class AliPayCallbackRequest extends AbstractPayCallbackRequest {
+public class PayCallbackOrderUpdateReqDTO {
 
-    /**
-     * 支付渠道
-     */
-    private String channel;
+  /**
+   * 订单号
+   */
+  private String orderSn;
 
-    /**
-     * 支付状态
-     */
-    private String tradeStatus;
+  /**
+   * 付款时间
+   */
+  private Date gmtPayment;
 
-    /**
-     * 支付凭证号
-     */
-    private String tradeNo;
-
-    /**
-     * 买家付款时间
-     */
-    private Date gmtPayment;
-
-    /**
-     * 买家付款金额
-     */
-    private BigDecimal buyerPayAmount;
-
-    @Override
-    public AliPayCallbackRequest getAliPayCallBackRequest() {
-        return this;
-    }
-
-    @Override
-    public String buildMark() {
-        return PayChannelEnum.ALI_PAY.getName();
-    }
+  /**
+   * 支付渠道
+   */
+  private Integer channel;
 }

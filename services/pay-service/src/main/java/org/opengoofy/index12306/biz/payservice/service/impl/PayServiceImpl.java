@@ -41,11 +41,16 @@ import org.opengoofy.index12306.biz.payservice.handler.AliPayNativeHandler;
 import org.opengoofy.index12306.biz.payservice.handler.AliRefundNativeHandler;
 import org.opengoofy.index12306.biz.payservice.mq.event.PayResultCallbackOrderEvent;
 import org.opengoofy.index12306.biz.payservice.mq.produce.PayResultCallbackOrderSendProduce;
+import org.opengoofy.index12306.biz.payservice.remote.TicketOrderRemoteService;
+import org.opengoofy.index12306.biz.payservice.remote.TicketRemoteService;
+import org.opengoofy.index12306.biz.payservice.remote.dto.PayCallbackOrderUpdateReqDTO;
+import org.opengoofy.index12306.biz.payservice.remote.dto.PayCallbackTicketReqDTO;
 import org.opengoofy.index12306.biz.payservice.service.PayService;
 import org.opengoofy.index12306.biz.payservice.service.payid.PayIdGeneratorManager;
 import org.opengoofy.index12306.framework.starter.cache.DistributedCache;
 import org.opengoofy.index12306.framework.starter.common.toolkit.BeanUtil;
 import org.opengoofy.index12306.framework.starter.convention.exception.ServiceException;
+import org.opengoofy.index12306.framework.starter.convention.result.Result;
 import org.opengoofy.index12306.framework.starter.designpattern.strategy.AbstractStrategyChoose;
 import org.opengoofy.index12306.framework.starter.idempotent.annotation.Idempotent;
 import org.opengoofy.index12306.framework.starter.idempotent.enums.IdempotentTypeEnum;
@@ -70,16 +75,15 @@ public class PayServiceImpl implements PayService {
     private final AbstractStrategyChoose abstractStrategyChoose;
     private final PayResultCallbackOrderSendProduce payResultCallbackOrderSendProduce;
     private final DistributedCache distributedCache;
+    private final TicketOrderRemoteService ticketOrderRemoteService;
+    private final TicketRemoteService ticketRemoteService;
 
-    @Idempotent(
-            type = IdempotentTypeEnum.SPEL,
-            uniqueKeyPrefix = "index12306-pay:lock_create_pay:",
-            key = "#requestParam.getOutOrderSn()"
-    )
+    @Idempotent(type = IdempotentTypeEnum.SPEL, uniqueKeyPrefix = "index12306-pay:lock_create_pay:", key = "#requestParam.getOutOrderSn()")
     @Transactional(rollbackFor = Exception.class)
     @Override
     public PayRespDTO commonPay(PayRequest requestParam) {
-        PayRespDTO cacheResult = distributedCache.get(ORDER_PAY_RESULT_INFO + requestParam.getOrderSn(), PayRespDTO.class);
+        PayRespDTO cacheResult = distributedCache.get(ORDER_PAY_RESULT_INFO + requestParam.getOrderSn(),
+                PayRespDTO.class);
         if (cacheResult != null) {
             return cacheResult;
         }
@@ -92,13 +96,15 @@ public class PayServiceImpl implements PayService {
         String paySn = PayIdGeneratorManager.generateId(requestParam.getOrderSn());
         insertPay.setPaySn(paySn);
         insertPay.setStatus(TradeStatusEnum.WAIT_BUYER_PAY.tradeCode());
-        insertPay.setTotalAmount(requestParam.getTotalAmount().multiply(new BigDecimal("100")).setScale(0, BigDecimal.ROUND_HALF_UP).intValue());
+        insertPay.setTotalAmount(requestParam.getTotalAmount().multiply(new BigDecimal("100"))
+                .setScale(0, BigDecimal.ROUND_HALF_UP).intValue());
         int insert = payMapper.insert(insertPay);
         if (insert <= 0) {
             log.error("支付单创建失败，支付聚合根：{}", JSON.toJSONString(requestParam));
             throw new ServiceException("支付单创建失败");
         }
-        distributedCache.put(ORDER_PAY_RESULT_INFO + requestParam.getOrderSn(), JSON.toJSONString(result), 10, TimeUnit.MINUTES);
+        distributedCache.put(ORDER_PAY_RESULT_INFO + requestParam.getOrderSn(), JSON.toJSONString(result), 10,
+                TimeUnit.MINUTES);
         return BeanUtil.convert(result, PayRespDTO.class);
     }
 
@@ -125,6 +131,24 @@ public class PayServiceImpl implements PayService {
         }
         // 交易成功，回调订单服务告知支付结果，修改订单流转状态
         if (Objects.equals(requestParam.getStatus(), TradeStatusEnum.TRADE_SUCCESS.tradeCode())) {
+            PayCallbackOrderUpdateReqDTO payCallbackOrderUpdateReqDTO = new PayCallbackOrderUpdateReqDTO();
+            payCallbackOrderUpdateReqDTO.setOrderSn(payDO.getOrderSn());
+            payCallbackOrderUpdateReqDTO.setGmtPayment(payDO.getGmtPayment());
+            payCallbackOrderUpdateReqDTO.setChannel(payDO.getChannel());
+            Result<Boolean> payCallbackOrderResult = ticketOrderRemoteService
+                    .payCallbackOrder(payCallbackOrderUpdateReqDTO);
+            if (!payCallbackOrderResult.isSuccess() || !Boolean.TRUE.equals(payCallbackOrderResult.getData())) {
+                log.error("支付回调同步订单状态失败，返回结果：{}", JSON.toJSONString(payCallbackOrderResult));
+                throw new ServiceException("支付回调同步订单状态失败");
+            }
+
+            PayCallbackTicketReqDTO payCallbackTicketReqDTO = new PayCallbackTicketReqDTO();
+            payCallbackTicketReqDTO.setOrderSn(payDO.getOrderSn());
+            Result<Boolean> payCallbackTicketResult = ticketRemoteService.payCallbackTicket(payCallbackTicketReqDTO);
+            if (!payCallbackTicketResult.isSuccess() || !Boolean.TRUE.equals(payCallbackTicketResult.getData())) {
+                log.error("支付回调同步车票状态失败，返回结果：{}", JSON.toJSONString(payCallbackTicketResult));
+                throw new ServiceException("支付回调同步车票状态失败");
+            }
             payResultCallbackOrderSendProduce.sendMessage(BeanUtil.convert(payDO, PayResultCallbackOrderEvent.class));
         }
     }

@@ -85,6 +85,13 @@ public interface TicketService extends IService<TicketDO> {
     PayInfoRespDTO getPayInfo(String orderSn);
 
     /**
+     * 支付成功后同步回写车票和座位状态
+     *
+     * @param orderSn 订单号
+     */
+    void payCallbackTicketOrder(String orderSn);
+
+    /**
      * 取消车票订单
      *
      * @param requestParam 取消车票订单入参

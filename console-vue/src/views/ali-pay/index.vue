@@ -7,9 +7,13 @@
 import { useRoute } from 'vue-router'
 
 const { query } = useRoute()
-const payBody = query?.body ? decodeURIComponent(query.body) : ''
+const cachedPayBody = window.sessionStorage.getItem('ALIPAY_PAY_BODY')
+const payBody =
+  cachedPayBody || (query?.body ? decodeURIComponent(query.body) : '')
+if (cachedPayBody) {
+  window.sessionStorage.removeItem('ALIPAY_PAY_BODY')
+}
 
-console.log(query.body)
 setTimeout(() => {
   if (payBody) {
     document.forms[0]?.submit()

@@ -672,6 +672,52 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, TicketDO> imple
         return payRemoteService.getPayInfo(orderSn).getData();
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void payCallbackTicketOrder(String orderSn) {
+        Result<org.opengoofy.index12306.biz.ticketservice.remote.dto.TicketOrderDetailRespDTO> ticketOrderDetailResult;
+        try {
+            ticketOrderDetailResult = ticketOrderRemoteService.queryTicketOrderByOrderSn(orderSn);
+            if (!ticketOrderDetailResult.isSuccess() || Objects.isNull(ticketOrderDetailResult.getData())) {
+                throw new ServiceException("支付结果回调查询订单失败");
+            }
+        } catch (Throwable ex) {
+            log.error("支付结果回调查询订单失败，orderSn={}", orderSn, ex);
+            throw ex;
+        }
+        org.opengoofy.index12306.biz.ticketservice.remote.dto.TicketOrderDetailRespDTO ticketOrderDetail = ticketOrderDetailResult
+                .getData();
+        seatService.markSold(
+                String.valueOf(ticketOrderDetail.getTrainId()),
+                ticketOrderDetail.getDeparture(),
+                ticketOrderDetail.getArrival(),
+                BeanUtil.convert(ticketOrderDetail.getPassengerDetails(), TrainPurchaseTicketRespDTO.class));
+        for (TicketOrderPassengerDetailRespDTO each : ticketOrderDetail.getPassengerDetails()) {
+            LambdaUpdateWrapper<TicketDO> ticketUpdateWrapper = Wrappers.lambdaUpdate(TicketDO.class)
+                    .eq(TicketDO::getTrainId, ticketOrderDetail.getTrainId())
+                    .eq(TicketDO::getUsername, each.getUsername())
+                    .eq(TicketDO::getCarriageNumber, each.getCarriageNumber())
+                    .eq(TicketDO::getSeatNumber, each.getSeatNumber())
+                    .eq(TicketDO::getTicketStatus, TicketStatusEnum.UNPAID.getCode());
+            TicketDO updateTicketDO = new TicketDO();
+            updateTicketDO.setTicketStatus(TicketStatusEnum.PAID.getCode());
+            int updateRows = baseMapper.update(updateTicketDO, ticketUpdateWrapper);
+            if (updateRows <= 0) {
+                LambdaUpdateWrapper<TicketDO> fallbackWrapper = Wrappers.lambdaUpdate(TicketDO.class)
+                        .eq(TicketDO::getTrainId, ticketOrderDetail.getTrainId())
+                        .eq(TicketDO::getUsername, each.getUsername())
+                        .eq(TicketDO::getCarriageNumber, each.getCarriageNumber())
+                        .eq(TicketDO::getSeatNumber, each.getSeatNumber())
+                        .ne(TicketDO::getTicketStatus, TicketStatusEnum.PAID.getCode());
+                int fallbackRows = baseMapper.update(updateTicketDO, fallbackWrapper);
+                log.warn(
+                        "支付回调更新 ticket_status 命中0行，触发兜底更新。orderSn={}, username={}, carriage={}, seat={}, fallbackRows={}",
+                        ticketOrderDetail.getOrderSn(), each.getUsername(), each.getCarriageNumber(),
+                        each.getSeatNumber(), fallbackRows);
+            }
+        }
+    }
+
     @ILog
     @Override
     public void cancelTicketOrder(CancelTicketOrderReqDTO requestParam) {
@@ -760,9 +806,18 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, TicketDO> imple
             refundReqDTO.setRefundAmount(partialRefundAmount);
         }
         refundReqDTO.setOrderSn(requestParam.getOrderSn());
-        Result<RefundRespDTO> refundRespDTOResult = payRemoteService.commonRefund(refundReqDTO);
-        if (!refundRespDTOResult.isSuccess() || Objects.isNull(refundRespDTOResult.getData())) {
-            throw new ServiceException("车票订单退款失败");
+        Integer refundAmount = refundReqDTO.getRefundAmount() == null ? 0 : refundReqDTO.getRefundAmount();
+        if (refundAmount > 0) {
+            Result<RefundRespDTO> refundRespDTOResult = payRemoteService.commonRefund(refundReqDTO);
+            if (!refundRespDTOResult.isSuccess() || Objects.isNull(refundRespDTOResult.getData())) {
+                String upstreamMessage = refundRespDTOResult == null ? null : refundRespDTOResult.getMessage();
+                throw new ServiceException(StrUtil.isNotBlank(upstreamMessage)
+                        ? "车票订单退款失败：" + upstreamMessage
+                        : "车票订单退款失败");
+            }
+        } else {
+            log.info("退款金额为0，跳过支付网关退款调用，直接回写业务状态。orderSn={}, refundType={}, recordIds={}",
+                    requestParam.getOrderSn(), requestParam.getType(), requestParam.getSubOrderRecordIdReqList());
         }
         updateTicketAndSeatStatusAfterRefund(ticketOrderDetailRespDTO, actualRefundPassengerDetails);
         RefundCallbackOrderUpdateReqDTO refundCallbackOrderUpdateReqDTO = new RefundCallbackOrderUpdateReqDTO();
@@ -773,11 +828,13 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, TicketDO> imple
             Result<Boolean> refundCallbackOrderResult = ticketOrderRemoteService
                     .refundCallbackOrder(refundCallbackOrderUpdateReqDTO);
             if (!refundCallbackOrderResult.isSuccess() || !Boolean.TRUE.equals(refundCallbackOrderResult.getData())) {
-                log.warn("退款后同步订单状态失败，orderSn={}，result={}", requestParam.getOrderSn(),
+                log.error("退款后同步订单状态失败，orderSn={}，result={}", requestParam.getOrderSn(),
                         JSON.toJSONString(refundCallbackOrderResult));
+                throw new ServiceException("退款后同步订单状态失败");
             }
         } catch (Throwable ex) {
-            log.warn("退款后同步订单状态异常，orderSn={}", requestParam.getOrderSn(), ex);
+            log.error("退款后同步订单状态异常，orderSn={}", requestParam.getOrderSn(), ex);
+            throw ex;
         }
         return new RefundTicketRespDTO();
     }
@@ -817,6 +874,46 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, TicketDO> imple
                 ticketOrderDetailRespDTO.getDeparture(),
                 ticketOrderDetailRespDTO.getArrival(),
                 BeanUtil.convert(refundPassengerDetails, TrainPurchaseTicketRespDTO.class));
+        rollbackRemainingTicketCacheAfterRefund(ticketOrderDetailRespDTO, refundPassengerDetails);
+        rollbackTokenBucketAfterRefund(ticketOrderDetailRespDTO, refundPassengerDetails);
+    }
+
+    private void rollbackRemainingTicketCacheAfterRefund(
+            org.opengoofy.index12306.biz.ticketservice.remote.dto.TicketOrderDetailRespDTO ticketOrderDetailRespDTO,
+            List<TicketOrderPassengerDetailRespDTO> refundPassengerDetails) {
+        try {
+            StringRedisTemplate stringRedisTemplate = (StringRedisTemplate) distributedCache.getInstance();
+            String trainId = String.valueOf(ticketOrderDetailRespDTO.getTrainId());
+            String departure = ticketOrderDetailRespDTO.getDeparture();
+            String arrival = ticketOrderDetailRespDTO.getArrival();
+            Map<Integer, List<TicketOrderPassengerDetailRespDTO>> seatTypeMap = refundPassengerDetails.stream()
+                    .collect(Collectors.groupingBy(TicketOrderPassengerDetailRespDTO::getSeatType));
+            List<RouteDTO> routeDTOList = trainStationService.listTakeoutTrainStationRoute(trainId, departure, arrival);
+            routeDTOList.forEach(each -> {
+                String keySuffix = StrUtil.join("_", trainId, each.getStartStation(), each.getEndStation());
+                seatTypeMap
+                        .forEach((seatType, ticketOrderPassengerDetailRespDTOList) -> stringRedisTemplate.opsForHash()
+                                .increment(TRAIN_STATION_REMAINING_TICKET + keySuffix, String.valueOf(seatType),
+                                        ticketOrderPassengerDetailRespDTOList.size()));
+            });
+        } catch (Throwable ex) {
+            log.error("[退款] 回滚列车Cache余票失败，orderSn={}", ticketOrderDetailRespDTO.getOrderSn(), ex);
+        }
+    }
+
+    private void rollbackTokenBucketAfterRefund(
+            org.opengoofy.index12306.biz.ticketservice.remote.dto.TicketOrderDetailRespDTO ticketOrderDetailRespDTO,
+            List<TicketOrderPassengerDetailRespDTO> refundPassengerDetails) {
+        try {
+            org.opengoofy.index12306.biz.ticketservice.remote.dto.TicketOrderDetailRespDTO rollbackTokenReq = new org.opengoofy.index12306.biz.ticketservice.remote.dto.TicketOrderDetailRespDTO();
+            rollbackTokenReq.setTrainId(ticketOrderDetailRespDTO.getTrainId());
+            rollbackTokenReq.setDeparture(ticketOrderDetailRespDTO.getDeparture());
+            rollbackTokenReq.setArrival(ticketOrderDetailRespDTO.getArrival());
+            rollbackTokenReq.setPassengerDetails(refundPassengerDetails);
+            ticketAvailabilityTokenBucket.rollbackInBucket(rollbackTokenReq);
+        } catch (Throwable ex) {
+            log.error("[退款] 回滚令牌桶失败，orderSn={}", ticketOrderDetailRespDTO.getOrderSn(), ex);
+        }
     }
 
     private List<String> buildDepartureStationList(List<TicketListDTO> seatResults) {

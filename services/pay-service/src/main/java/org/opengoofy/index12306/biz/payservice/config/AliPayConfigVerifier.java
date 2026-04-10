@@ -45,6 +45,11 @@ public class AliPayConfigVerifier {
   @PostConstruct
   public void verify() {
     try {
+      if (StrUtil.hasBlank(aliPayProperties.getAppId(), aliPayProperties.getPrivateKey(),
+          aliPayProperties.getAlipayPublicKey())) {
+        log.error("Alipay key check failed: appId/privateKey/alipayPublicKey must not be blank.");
+        return;
+      }
       String privateKey = normalizeKey(aliPayProperties.getPrivateKey());
       String alipayPublicKey = normalizeKey(aliPayProperties.getAlipayPublicKey());
       String appPublicKey = normalizeKey(aliPayProperties.getAppPublicKey());
@@ -65,6 +70,9 @@ public class AliPayConfigVerifier {
       if (StrUtil.isNotBlank(appPublicKey) && !StrUtil.equals(appPublicFromPrivate, appPublicKey)) {
         log.error("Configured app-public-key does not match private-key derived public key. " +
             "Please keep app-public-key and private-key as the same key pair.");
+      } else if (StrUtil.isBlank(appPublicKey)) {
+        log.warn("pay.alipay.app-public-key is empty. " +
+            "Set it from Alipay console to detect appId/privateKey mismatch at startup.");
       }
 
       if (StrUtil.equals(appPublicFromPrivate, alipayPublicKey)) {
@@ -93,13 +101,17 @@ public class AliPayConfigVerifier {
     return StrUtil.replace(
         StrUtil.replace(
             StrUtil.replace(
-                StrUtil.replace(StrUtil.trim(key), "-----BEGIN PRIVATE KEY-----", ""),
+                StrUtil.replace(
+                    StrUtil.replace(StrUtil.trim(key), "-----BEGIN PRIVATE KEY-----", ""),
+                    "-----BEGIN RSA PRIVATE KEY-----",
+                    ""),
                 "-----END PRIVATE KEY-----",
                 ""),
             "-----BEGIN PUBLIC KEY-----",
             ""),
         "-----END PUBLIC KEY-----",
         "")
+        .replace("-----END RSA PRIVATE KEY-----", "")
         .replaceAll("\\s+", "");
   }
 

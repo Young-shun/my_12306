@@ -470,6 +470,24 @@ public class OrderServiceImpl implements OrderService {
                 .orderItemStatus(OrderItemStatusEnum.REFUNDED.getStatus())
                 .orderItemDOList(orderItemDOList)
                 .build());
+
+        LambdaQueryWrapper<OrderItemDO> allOrderItemsQueryWrapper = Wrappers.lambdaQuery(OrderItemDO.class)
+                .eq(OrderItemDO::getOrderSn, requestParam.getOrderSn())
+                .select(OrderItemDO::getStatus);
+        List<OrderItemDO> allOrderItems = orderItemMapper.selectList(allOrderItemsQueryWrapper);
+        boolean fullRefund = !allOrderItems.isEmpty() && allOrderItems.stream()
+                .allMatch(each -> Objects.equals(each.getStatus(), OrderItemStatusEnum.REFUNDED.getStatus()));
+        Integer targetOrderStatus = fullRefund
+                ? OrderStatusEnum.FULL_REFUND.getStatus()
+                : OrderStatusEnum.PARTIAL_REFUND.getStatus();
+        OrderDO updateOrderDO = new OrderDO();
+        updateOrderDO.setStatus(targetOrderStatus);
+        LambdaUpdateWrapper<OrderDO> updateOrderWrapper = Wrappers.lambdaUpdate(OrderDO.class)
+                .eq(OrderDO::getOrderSn, requestParam.getOrderSn());
+        int orderUpdateResult = orderMapper.update(updateOrderDO, updateOrderWrapper);
+        if (orderUpdateResult <= 0) {
+            throw new ServiceException(OrderCanalErrorCodeEnum.ORDER_STATUS_REVERSAL_ERROR);
+        }
     }
 
     @Override
@@ -496,11 +514,27 @@ public class OrderServiceImpl implements OrderService {
         if (orderSnSet.isEmpty()) {
             return false;
         }
+        // 以乘车人维度的订单明细状态为准，避免部分退款场景下按订单状态误判。
+        LambdaQueryWrapper<OrderItemDO> activeOrderItemQueryWrapper = Wrappers.lambdaQuery(OrderItemDO.class)
+                .in(OrderItemDO::getOrderSn, orderSnSet)
+                .in(OrderItemDO::getIdCard, requestParam.getIdCardList())
+                .in(OrderItemDO::getStatus,
+                        OrderItemStatusEnum.PENDING_PAYMENT.getStatus(),
+                        OrderItemStatusEnum.ALREADY_PAID.getStatus(),
+                        OrderItemStatusEnum.ALREADY_PULL_IN.getStatus())
+                .select(OrderItemDO::getOrderSn);
+        List<OrderItemDO> activeOrderItems = orderItemMapper.selectList(activeOrderItemQueryWrapper);
+        if (activeOrderItems == null || activeOrderItems.isEmpty()) {
+            return false;
+        }
+        Set<String> activeOrderSnSet = activeOrderItems.stream()
+                .map(OrderItemDO::getOrderSn)
+                .collect(Collectors.toSet());
+        if (activeOrderSnSet.isEmpty()) {
+            return false;
+        }
         LambdaQueryWrapper<OrderDO> orderQueryWrapper = Wrappers.lambdaQuery(OrderDO.class)
-                .in(OrderDO::getOrderSn, orderSnSet)
-                .in(OrderDO::getStatus,
-                        OrderStatusEnum.PENDING_PAYMENT.getStatus(),
-                        OrderStatusEnum.ALREADY_PAID.getStatus())
+                .in(OrderDO::getOrderSn, activeOrderSnSet)
                 .select(OrderDO::getRidingDate, OrderDO::getDepartureTime, OrderDO::getArrivalTime);
         List<OrderDO> orderDOList = orderMapper.selectList(orderQueryWrapper);
         Date targetDepartureTime = requestParam.getDepartureTime();

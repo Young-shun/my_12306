@@ -29,22 +29,31 @@ import org.opengoofy.index12306.biz.payservice.service.PayService;
 import org.opengoofy.index12306.framework.starter.designpattern.strategy.AbstractExecuteStrategy;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
 /**
  * 阿里支付回调组件
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public final class AliPayCallbackHandler extends AbstractPayCallbackHandler implements AbstractExecuteStrategy<PayCallbackRequest, Void> {
+public final class AliPayCallbackHandler extends AbstractPayCallbackHandler
+        implements AbstractExecuteStrategy<PayCallbackRequest, Void> {
 
     private final PayService payService;
 
     @Override
     public void callback(PayCallbackRequest payCallbackRequest) {
         AliPayCallbackRequest aliPayCallBackRequest = payCallbackRequest.getAliPayCallBackRequest();
+        Integer payAmountFen = aliPayCallBackRequest.getBuyerPayAmount() == null
+                ? null
+                : aliPayCallBackRequest.getBuyerPayAmount().multiply(new BigDecimal("100"))
+                        .setScale(0, RoundingMode.HALF_UP)
+                        .intValue();
         PayCallbackReqDTO payCallbackRequestParam = PayCallbackReqDTO.builder()
                 .status(TradeStatusEnum.queryActualTradeStatusCode(aliPayCallBackRequest.getTradeStatus()))
-                .payAmount(aliPayCallBackRequest.getBuyerPayAmount())
+                .payAmount(payAmountFen)
                 .tradeNo(aliPayCallBackRequest.getTradeNo())
                 .gmtPayment(aliPayCallBackRequest.getGmtPayment())
                 .orderSn(aliPayCallBackRequest.getOrderRequestId())

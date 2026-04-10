@@ -97,18 +97,16 @@
 
         <template #status="{ text, record }">
           <div>
-            {{
-              TICKET_STATUS_LIST.find((item) => item.value === record?.status)
-                ?.label ?? '--'
-            }}
+            {{ buildOrderRefundMeta(record).statusText }}
           </div>
-          <div v-if="record?.status === 10">
+          <div v-if="buildOrderRefundMeta(record).canRefund">
             <Button
               type="link"
               @click="
                 () => {
                   state.visible = true
                   state.currentOrder = record?.orderSn
+                  state.refundOrder = []
                 }
               "
               >退票</Button
@@ -166,7 +164,12 @@
     :visible="state.visible"
     title="退票申请"
     class="custom-modal"
-    @cancel="state.visible = false"
+    @cancel="
+      () => {
+        state.visible = false
+        state.refundOrder = []
+      }
+    "
     :footer="null"
   >
     <Alert
@@ -187,7 +190,8 @@
         :options="
           state.dataSource
             ?.find((item) => item.orderSn === state.currentOrder)
-            .passengerDetails.map((item) => ({
+            ?.passengerDetails?.filter((item) => item.status === 10)
+            .map((item) => ({
               label: item.realName,
               value: item.id
             }))
@@ -364,10 +368,12 @@ const columns = [
     customRender: ({ text, record }) => {
       return {
         children: h(RefundTicket, {
-          status: record?.status,
+          statusText: buildOrderRefundMeta(record).statusText,
+          canRefund: buildOrderRefundMeta(record).canRefund,
           refundClick: () => {
             state.visible = true
             state.currentOrder = record?.orderSn
+            state.refundOrder = []
           }
         }),
         props: {
@@ -480,13 +486,44 @@ const onCheckAllChange = (e) => {
     indeterminate: false
   })
 }
+
+const buildOrderRefundMeta = (record) => {
+  const statusList = record?.passengerDetails?.map((item) => item.status) || []
+  const hasPaid = statusList.includes(10)
+  const hasRefunded = statusList.includes(40)
+  if (hasPaid && hasRefunded) {
+    return {
+      statusText: '部分退票',
+      canRefund: true
+    }
+  }
+  if (hasPaid) {
+    return {
+      statusText:
+        TICKET_STATUS_LIST.find((item) => item.value === 10)?.label ?? '--',
+      canRefund: true
+    }
+  }
+  const firstStatus = statusList[0]
+  return {
+    statusText:
+      TICKET_STATUS_LIST.find((item) => item.value === firstStatus)?.label ??
+      '--',
+    canRefund: false
+  }
+}
+
 const handleRefund = () => {
+  if (!state.refundOrder.length) {
+    return
+  }
   fetchRefundTicket({
     orderSn: state.currentOrder,
     type: 0,
     subOrderRecordIdReqList: state.refundOrder
   }).then((res) => {
     state.visible = false
+    state.refundOrder = []
     message.success('退款成功')
     getTicketList(state.current, state.size, state.activeKey)
   })

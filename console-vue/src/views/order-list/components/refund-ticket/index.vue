@@ -1,11 +1,12 @@
 <template>
   <div>
     {{
-      TICKET_STATUS_LIST.find((item) => item.value === props?.status)?.label ??
+      props?.statusText ||
+      TICKET_STATUS_LIST.find((item) => item.value === props?.status)?.label ||
       '--'
     }}
   </div>
-  <div v-if="props?.status === 10">
+  <div v-if="props?.canRefund ?? props?.status === 10">
     <a @click="props.refundClick">退票</a>
   </div>
 </template>
@@ -14,6 +15,8 @@
 import { TICKET_STATUS_LIST } from '@/constants'
 const props = defineProps({
   status: Number,
+  statusText: String,
+  canRefund: Boolean,
   refundClick: Function
 })
 </script>

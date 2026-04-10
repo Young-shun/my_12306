@@ -356,7 +356,8 @@ const handlePay = (channel) => {
     state.loading = true
     setTimeout(() => {
       state.loading = false
-      window.open(`/aliPay?body=${encodeURIComponent(payBody)}`)
+      window.sessionStorage.setItem('ALIPAY_PAY_BODY', payBody)
+      window.open('/aliPay')
     }, 500)
   }).catch(() => {
     state.isPayingOpen = false

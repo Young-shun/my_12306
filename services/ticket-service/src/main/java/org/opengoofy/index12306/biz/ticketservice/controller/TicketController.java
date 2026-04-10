@@ -19,6 +19,7 @@ package org.opengoofy.index12306.biz.ticketservice.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.opengoofy.index12306.biz.ticketservice.dto.req.CancelTicketOrderReqDTO;
+import org.opengoofy.index12306.biz.ticketservice.dto.req.PayCallbackTicketReqDTO;
 import org.opengoofy.index12306.biz.ticketservice.dto.req.PurchaseTicketReqDTO;
 import org.opengoofy.index12306.biz.ticketservice.dto.req.RefundTicketReqDTO;
 import org.opengoofy.index12306.biz.ticketservice.dto.req.TicketPageQueryReqDTO;
@@ -83,6 +84,15 @@ public class TicketController {
     @GetMapping("/api/ticket-service/ticket/pay/query")
     public Result<PayInfoRespDTO> getPayInfo(@RequestParam(value = "orderSn") String orderSn) {
         return Results.success(ticketService.getPayInfo(orderSn));
+    }
+
+    /**
+     * 支付成功后同步回写车票和座位状态
+     */
+    @PostMapping("/api/ticket-service/ticket/pay/callback")
+    public Result<Boolean> payCallbackTicket(@RequestBody PayCallbackTicketReqDTO requestParam) {
+        ticketService.payCallbackTicketOrder(requestParam.getOrderSn());
+        return Results.success(Boolean.TRUE);
     }
 
     /**
