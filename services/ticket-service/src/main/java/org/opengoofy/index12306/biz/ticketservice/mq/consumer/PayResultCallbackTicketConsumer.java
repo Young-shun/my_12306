@@ -29,6 +29,8 @@ import org.opengoofy.index12306.biz.ticketservice.dao.entity.TicketDO;
 import org.opengoofy.index12306.biz.ticketservice.dao.mapper.TicketMapper;
 import org.opengoofy.index12306.biz.ticketservice.mq.domain.MessageWrapper;
 import org.opengoofy.index12306.biz.ticketservice.mq.event.PayResultCallbackTicketEvent;
+import org.opengoofy.index12306.biz.ticketservice.remote.PayRemoteService;
+import org.opengoofy.index12306.biz.ticketservice.remote.dto.PayTaskCallbackCompleteReqDTO;
 import org.opengoofy.index12306.biz.ticketservice.remote.TicketOrderRemoteService;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.TicketOrderDetailRespDTO;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.TicketOrderPassengerDetailRespDTO;
@@ -51,12 +53,13 @@ import java.util.Objects;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@RocketMQMessageListener(topic = TicketRocketMQConstant.PAY_GLOBAL_TOPIC_KEY, selectorExpression = TicketRocketMQConstant.PAY_RESULT_CALLBACK_TAG_KEY, consumerGroup = TicketRocketMQConstant.PAY_RESULT_CALLBACK_TICKET_CG_KEY)
+@RocketMQMessageListener(topic = TicketRocketMQConstant.PAY_GLOBAL_TOPIC_KEY, selectorExpression = TicketRocketMQConstant.PAY_RESULT_CALLBACK_TICKET_TAG_KEY, consumerGroup = TicketRocketMQConstant.PAY_RESULT_CALLBACK_TICKET_CG_KEY)
 public class PayResultCallbackTicketConsumer implements RocketMQListener<MessageWrapper<PayResultCallbackTicketEvent>> {
 
     private final TicketOrderRemoteService ticketOrderRemoteService;
     private final SeatService seatService;
     private final TicketMapper ticketMapper;
+    private final PayRemoteService payRemoteService;
 
     @Idempotent(uniqueKeyPrefix = "index12306-ticket:pay_result_callback:", key = "#message.getKeys()+'_'+#message.hashCode()", type = IdempotentTypeEnum.SPEL, scene = IdempotentSceneEnum.MQ, keyTimeout = 7200L)
     @Transactional(rollbackFor = Exception.class)
@@ -102,6 +105,14 @@ public class PayResultCallbackTicketConsumer implements RocketMQListener<Message
                         ticketOrderDetail.getOrderSn(), each.getUsername(), each.getCarriageNumber(),
                         each.getSeatNumber(), fallbackRows);
             }
+        }
+
+        PayTaskCallbackCompleteReqDTO callbackReq = new PayTaskCallbackCompleteReqDTO();
+        callbackReq.setOrderSn(ticketOrderDetail.getOrderSn());
+        callbackReq.setCallbackType("TICKET");
+        Result<Boolean> callbackResult = payRemoteService.callbackPayComplete(callbackReq);
+        if (!callbackResult.isSuccess()) {
+            throw new ServiceException("支付任务票务回写完成回执失败");
         }
     }
 }

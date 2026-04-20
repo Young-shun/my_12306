@@ -18,6 +18,7 @@
 package org.opengoofy.index12306.biz.orderservice.remote;
 
 import org.opengoofy.index12306.biz.orderservice.remote.dto.RefundTaskCallbackCompleteReqDTO;
+import org.opengoofy.index12306.biz.orderservice.remote.dto.PayTaskCallbackCompleteReqDTO;
 import org.opengoofy.index12306.framework.starter.convention.result.Result;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,4 +35,10 @@ public interface PayRemoteService {
    */
   @PostMapping("/api/pay-service/refund-task/callback/complete")
   Result<Boolean> callbackComplete(@RequestBody RefundTaskCallbackCompleteReqDTO requestParam);
+
+  /**
+   * 支付任务下游回写完成回执
+   */
+  @PostMapping("/api/pay-service/pay-task/callback/complete")
+  Result<Boolean> callbackPayComplete(@RequestBody PayTaskCallbackCompleteReqDTO requestParam);
 }

@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -15,30 +15,23 @@
  * limitations under the License.
  */
 
-package org.opengoofy.index12306.biz.payservice.common.constant;
+package org.opengoofy.index12306.biz.ticketservice.remote.dto;
+
+import lombok.Data;
 
 /**
- * Redis Key 定义常量类
+ * 支付任务下游回写完成回执请求
  */
-public final class RedisKeyConstant {
+@Data
+public class PayTaskCallbackCompleteReqDTO {
 
-    /**
-     * 订单未支付临时存储信息
-     */
-    public static final String ORDER_PAY_RESULT_INFO = "index12306-pay-service:order_pay_result:";
+  /**
+   * 订单号
+   */
+  private String orderSn;
 
-    /**
-     * 支付回写订单侧完成标记
-     */
-    public static final String PAY_CALLBACK_ORDER_DONE = "index12306-pay-service:pay_callback:order_done:";
-
-    /**
-     * 支付回写票务侧完成标记
-     */
-    public static final String PAY_CALLBACK_TICKET_DONE = "index12306-pay-service:pay_callback:ticket_done:";
-
-    /**
-     * 支付回写最终完成标记
-     */
-    public static final String PAY_CALLBACK_DONE = "index12306-pay-service:pay_callback:done:";
+  /**
+   * 回写类型：ORDER / TICKET
+   */
+  private String callbackType;
 }
