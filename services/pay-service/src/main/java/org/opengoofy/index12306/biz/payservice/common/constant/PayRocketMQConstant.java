@@ -36,4 +36,19 @@ public final class PayRocketMQConstant {
      * 退款结果回调订单 Tag Key
      */
     public static final String REFUND_RESULT_CALLBACK_TAG_KEY = "index12306_pay-service_refund-result-callback_tag${unique-name:}";
+
+    /**
+     * 退款任务处理 Topic Key（异步化）
+     */
+    public static final String REFUND_TASK_TOPIC_KEY = "index12306_pay-service_refund-task-topic${unique-name:}";
+
+    /**
+     * 退款任务处理 Tag Key
+     */
+    public static final String REFUND_TASK_TAG_KEY = "index12306_pay-service_refund-task-tag${unique-name:}";
+
+    /**
+     * 退款任务处理消费者组 Key
+     */
+    public static final String REFUND_TASK_CONSUMER_GROUP_KEY = "index12306_pay-service_refund-task-consumer-group${unique-name:}";
 }

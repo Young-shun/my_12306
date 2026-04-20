@@ -76,7 +76,9 @@ public class AliRefundNativeHandler extends AbstractRefundHandler
         BigDecimal payAmount = aliRefundRequest.getPayAmount();
         BigDecimal refundAmount = payAmount.divide(new BigDecimal(100));
         model.setRefundAmount(refundAmount.toString());
-        model.setOutRequestNo(SnowflakeIdUtil.nextIdStr());
+        model.setOutRequestNo(StrUtil.isNotEmpty(aliRefundRequest.getRefundTaskId())
+                ? aliRefundRequest.getRefundTaskId()
+                : SnowflakeIdUtil.nextIdStr());
         AlipayTradeRefundRequest request = new AlipayTradeRefundRequest();
         request.setBizModel(model);
         try {

@@ -1,4 +1,5 @@
-﻿/*
+﻿
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -23,9 +24,12 @@ import org.opengoofy.index12306.biz.ticketservice.remote.dto.PayInfoRespDTO;
 import org.opengoofy.index12306.framework.starter.convention.result.Result;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundTaskReqDTO;
+import org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundTaskStatusRespDTO;
 
 /**
  * 支付单远程调用服务
@@ -44,4 +48,16 @@ public interface PayRemoteService {
      */
     @PostMapping("/api/pay-service/common/refund")
     Result<RefundRespDTO> commonRefund(@RequestBody RefundReqDTO requestParam);
+
+    /**
+     * 查询异步退款任务状态
+     */
+    @GetMapping("/api/pay-service/refund-task/query/{refundTaskId}")
+    Result<RefundTaskStatusRespDTO> queryRefundTaskStatus(@PathVariable("refundTaskId") String refundTaskId);
+
+    /**
+     * 异步提交退款任务
+     */
+    @PostMapping("/api/pay-service/refund-task/submit")
+    Result<Void> submitRefundTask(@RequestBody RefundTaskReqDTO requestParam);
 }

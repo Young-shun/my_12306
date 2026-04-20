@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -15,51 +15,54 @@
  * limitations under the License.
  */
 
-package org.opengoofy.index12306.biz.payservice.dto.base;
+package org.opengoofy.index12306.biz.ticketservice.remote.dto;
 
-import lombok.Getter;
-import lombok.Setter;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
- * 抽象退款入参实体
+ * 退款任务详情元素 DTO
  */
-public abstract class AbstractRefundRequest implements RefundRequest {
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class RefundTaskDetailDTO {
 
-    /**
-     * 交易环境，H5、小程序、网站等
-     */
-    @Getter
-    @Setter
-    private Integer tradeType;
+  /**
+   * 用户ID
+   */
+  private Long userId;
 
-    /**
-     * 订单号
-     */
-    @Getter
-    @Setter
-    private String orderSn;
+  /**
+   * 用户名
+   */
+  private String username;
 
-    /**
-     * 退款任务号
-     */
-    @Getter
-    @Setter
-    private String refundTaskId;
+  /**
+   * 座位类型
+   */
+  private Integer seatType;
 
-    /**
-     * 支付渠道
-     */
-    @Getter
-    @Setter
-    private Integer channel;
+  /**
+   * 证件类型
+   */
+  private Integer idType;
 
-    @Override
-    public AliRefundRequest getAliRefundRequest() {
-        return null;
-    }
+  /**
+   * 证件号码
+   */
+  private String idCard;
 
-    @Override
-    public String buildMark() {
-        return null;
-    }
+  /**
+   * 真实姓名
+   */
+  private String realName;
+
+  /**
+   * 退款金额（单位：分）
+   */
+  private Integer amount;
 }

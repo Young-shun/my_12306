@@ -1,4 +1,5 @@
-﻿/*
+﻿
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -119,6 +120,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+import java.util.UUID;
 
 import static org.opengoofy.index12306.biz.ticketservice.common.constant.Index12306Constant.ADVANCE_TICKET_DAY;
 import static org.opengoofy.index12306.biz.ticketservice.common.constant.RedisKeyConstant.LOCK_PURCHASE_TICKETS;
@@ -777,7 +779,6 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, TicketDO> imple
         if (CollectionUtil.isEmpty(passengerDetails)) {
             throw new ServiceException("车票子订单不存在");
         }
-        RefundReqDTO refundReqDTO = new RefundReqDTO();
         List<TicketOrderPassengerDetailRespDTO> actualRefundPassengerDetails;
         if (RefundTypeEnum.PARTIAL_REFUND.getType().equals(requestParam.getType())) {
             TicketOrderItemQueryReqDTO ticketOrderItemQueryReqDTO = new TicketOrderItemQueryReqDTO();
@@ -790,51 +791,49 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, TicketDO> imple
             }
             List<TicketOrderPassengerDetailRespDTO> partialRefundPassengerDetails = queryTicketItemOrderById.getData();
             actualRefundPassengerDetails = partialRefundPassengerDetails;
-            refundReqDTO.setRefundTypeEnum(RefundTypeEnum.PARTIAL_REFUND);
-            refundReqDTO.setRefundDetailReqDTOList(partialRefundPassengerDetails);
         } else if (RefundTypeEnum.FULL_REFUND.getType().equals(requestParam.getType())) {
             actualRefundPassengerDetails = passengerDetails;
-            refundReqDTO.setRefundTypeEnum(RefundTypeEnum.FULL_REFUND);
-            refundReqDTO.setRefundDetailReqDTOList(passengerDetails);
         } else {
             throw new ServiceException("退款类型错误");
         }
-        if (CollectionUtil.isNotEmpty(actualRefundPassengerDetails)) {
-            Integer partialRefundAmount = actualRefundPassengerDetails.stream()
-                    .mapToInt(TicketOrderPassengerDetailRespDTO::getAmount)
-                    .sum();
-            refundReqDTO.setRefundAmount(partialRefundAmount);
-        }
-        refundReqDTO.setOrderSn(requestParam.getOrderSn());
-        Integer refundAmount = refundReqDTO.getRefundAmount() == null ? 0 : refundReqDTO.getRefundAmount();
+        Integer refundAmount = actualRefundPassengerDetails.stream()
+                .mapToInt(TicketOrderPassengerDetailRespDTO::getAmount)
+                .sum();
+        // 异步提交退款任务到 pay-service
         if (refundAmount > 0) {
-            Result<RefundRespDTO> refundRespDTOResult = payRemoteService.commonRefund(refundReqDTO);
-            if (!refundRespDTOResult.isSuccess() || Objects.isNull(refundRespDTOResult.getData())) {
-                String upstreamMessage = refundRespDTOResult == null ? null : refundRespDTOResult.getMessage();
-                throw new ServiceException(StrUtil.isNotBlank(upstreamMessage)
-                        ? "车票订单退款失败：" + upstreamMessage
-                        : "车票订单退款失败");
+            String refundTaskId = UUID.randomUUID().toString();
+            List<org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundTaskDetailDTO> refundDetails = new ArrayList<>();
+            actualRefundPassengerDetails.forEach(detail -> {
+                org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundTaskDetailDTO refundDetail = new org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundTaskDetailDTO();
+                refundDetail.setUserId(detail.getUserId());
+                refundDetail.setUsername(detail.getUsername());
+                refundDetail.setSeatType(detail.getSeatType());
+                refundDetail.setIdType(detail.getIdType());
+                refundDetail.setIdCard(detail.getIdCard());
+                refundDetail.setRealName(detail.getRealName());
+                refundDetail.setAmount(detail.getAmount());
+                refundDetails.add(refundDetail);
+            });
+            org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundTaskReqDTO refundTaskReqDTO = org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundTaskReqDTO
+                    .builder()
+                    .refundTaskId(refundTaskId)
+                    .orderSn(requestParam.getOrderSn())
+                    .paySn("") // 从订单查询支付单 SN
+                    .refundType(RefundTypeEnum.PARTIAL_REFUND.getType().equals(requestParam.getType()) ? 0 : 1)
+                    .refundAmount(refundAmount)
+                    .refundDetails(refundDetails)
+                    .build();
+            try {
+                payRemoteService.submitRefundTask(refundTaskReqDTO);
+                log.info("退款任务已提交，refundTaskId: {}, orderSn: {}, amount: {}",
+                        refundTaskId, requestParam.getOrderSn(), refundAmount);
+            } catch (Exception e) {
+                log.error("提交退款任务失败，orderSn: {}", requestParam.getOrderSn(), e);
+                throw new ServiceException("提交退款任务失败");
             }
         } else {
-            log.info("退款金额为0，跳过支付网关退款调用，直接回写业务状态。orderSn={}, refundType={}, recordIds={}",
+            log.info("退款金额为0，跳过退款流程。orderSn={}, refundType={}, recordIds={}",
                     requestParam.getOrderSn(), requestParam.getType(), requestParam.getSubOrderRecordIdReqList());
-        }
-        updateTicketAndSeatStatusAfterRefund(ticketOrderDetailRespDTO, actualRefundPassengerDetails);
-        RefundCallbackOrderUpdateReqDTO refundCallbackOrderUpdateReqDTO = new RefundCallbackOrderUpdateReqDTO();
-        refundCallbackOrderUpdateReqDTO.setOrderSn(requestParam.getOrderSn());
-        refundCallbackOrderUpdateReqDTO.setRefundType(requestParam.getType());
-        refundCallbackOrderUpdateReqDTO.setOrderItemRecordIds(requestParam.getSubOrderRecordIdReqList());
-        try {
-            Result<Boolean> refundCallbackOrderResult = ticketOrderRemoteService
-                    .refundCallbackOrder(refundCallbackOrderUpdateReqDTO);
-            if (!refundCallbackOrderResult.isSuccess() || !Boolean.TRUE.equals(refundCallbackOrderResult.getData())) {
-                log.error("退款后同步订单状态失败，orderSn={}，result={}", requestParam.getOrderSn(),
-                        JSON.toJSONString(refundCallbackOrderResult));
-                throw new ServiceException("退款后同步订单状态失败");
-            }
-        } catch (Throwable ex) {
-            log.error("退款后同步订单状态异常，orderSn={}", requestParam.getOrderSn(), ex);
-            throw ex;
         }
         return new RefundTicketRespDTO();
     }
