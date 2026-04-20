@@ -27,6 +27,7 @@ import org.opengoofy.index12306.biz.ticketservice.dto.resp.RefundTicketRespDTO;
 import org.opengoofy.index12306.biz.ticketservice.dto.resp.TicketPageQueryRespDTO;
 import org.opengoofy.index12306.biz.ticketservice.dto.resp.TicketPurchaseRespDTO;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.PayInfoRespDTO;
+import org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundCallbackTicketReqDTO;
 import org.springframework.web.bind.annotation.RequestBody;
 
 /**
@@ -90,6 +91,11 @@ public interface TicketService extends IService<TicketDO> {
      * @param orderSn 订单号
      */
     void payCallbackTicketOrder(String orderSn);
+
+    /**
+     * 退款后同步回写车票和座位状态
+     */
+    void refundCallbackTicketOrder(RefundCallbackTicketReqDTO requestParam);
 
     /**
      * 取消车票订单

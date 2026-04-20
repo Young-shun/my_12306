@@ -40,7 +40,9 @@ import org.opengoofy.index12306.biz.payservice.dto.RefundTaskDetailDTO;
 import org.opengoofy.index12306.biz.payservice.mq.domain.MessageWrapper;
 import org.opengoofy.index12306.biz.payservice.mq.event.RefundTaskEvent;
 import org.opengoofy.index12306.biz.payservice.mq.event.RefundResultCallbackOrderEvent;
+import org.opengoofy.index12306.biz.payservice.mq.event.RefundResultCallbackTicketEvent;
 import org.opengoofy.index12306.biz.payservice.mq.produce.RefundResultCallbackOrderSendProduce;
+import org.opengoofy.index12306.biz.payservice.mq.produce.RefundResultCallbackTicketSendProduce;
 import org.opengoofy.index12306.biz.payservice.dto.base.RefundRequest;
 import org.opengoofy.index12306.biz.payservice.dto.base.RefundResponse;
 import org.opengoofy.index12306.biz.payservice.remote.TicketOrderRemoteService;
@@ -58,6 +60,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Date;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -74,6 +77,7 @@ public class RefundTaskConsumer implements RocketMQListener<MessageWrapper<Refun
   private final RefundTaskMapper refundTaskMapper;
   private final TicketOrderRemoteService ticketOrderRemoteService;
   private final AbstractStrategyChoose abstractStrategyChoose;
+  private final RefundResultCallbackTicketSendProduce refundResultCallbackTicketSendProduce;
   private final RefundResultCallbackOrderSendProduce refundResultCallbackOrderSendProduce;
   private final RefundTaskStatusService refundTaskStatusService;
 
@@ -88,76 +92,122 @@ public class RefundTaskConsumer implements RocketMQListener<MessageWrapper<Refun
     log.info("开始处理退款任务，refundTaskId: {}, orderSn: {}", refundTaskId, orderSn);
 
     try {
-      // 1. 更新任务状态为处理中
-      refundTaskStatusService.updateTaskStatus(refundTaskId, 1, null);
+      RefundTaskDO refundTaskDO = refundTaskMapper.selectOne(Wrappers.lambdaQuery(RefundTaskDO.class)
+          .eq(RefundTaskDO::getRefundTaskId, refundTaskId));
+      boolean callbackOnly = Objects.nonNull(refundTaskDO)
+          && Objects.equals(refundTaskDO.getStatus(), 4)
+          && refundTaskDO.getRefundResult() != null;
+      RefundResponse result = null;
 
-      // 2. 查询支付单
-      LambdaQueryWrapper<PayDO> queryWrapper = Wrappers.lambdaQuery(PayDO.class)
-          .eq(PayDO::getOrderSn, orderSn);
-      PayDO payDO = payMapper.selectOne(queryWrapper);
-      if (Objects.isNull(payDO)) {
-        refundTaskStatusService.updateTaskStatus(refundTaskId, 3, "支付单不存在");
-        throw new ServiceException("支付单不存在");
+      if (!callbackOnly) {
+        // 1. 更新任务状态为处理中
+        refundTaskStatusService.updateTaskStatus(refundTaskId, 1, null);
+
+        // 2. 查询支付单
+        LambdaQueryWrapper<PayDO> queryWrapper = Wrappers.lambdaQuery(PayDO.class)
+            .eq(PayDO::getOrderSn, orderSn);
+        PayDO payDO = payMapper.selectOne(queryWrapper);
+        if (Objects.isNull(payDO)) {
+          refundTaskStatusService.updateTaskStatus(refundTaskId, 3, "支付单不存在");
+          throw new ServiceException("支付单不存在");
+        }
+
+        // 3. 创建退款单（逐乘客）
+        createRefundRecords(refundTaskEvent, orderSn);
+
+        // 4. 调用支付宝进行退款
+        RefundCommand refundCommand = BeanUtil.convert(payDO, RefundCommand.class);
+        refundCommand.setRefundTaskId(refundTaskId);
+        refundCommand.setPayAmount(new BigDecimal(refundTaskEvent.getRefundAmount()));
+        RefundRequest refundRequest = RefundRequestConvert.command2RefundRequest(refundCommand);
+        result = abstractStrategyChoose.chooseAndExecuteResp(refundRequest.buildMark(), refundRequest);
+
+        // 5. 更新支付单和退款单状态
+        payDO.setStatus(result.getStatus());
+        payDO.setPayAmount(payDO.getTotalAmount() - refundTaskEvent.getRefundAmount());
+        LambdaUpdateWrapper<PayDO> payUpdateWrapper = Wrappers.lambdaUpdate(PayDO.class)
+            .eq(PayDO::getOrderSn, orderSn);
+        int payUpdateResult = payMapper.update(payDO, payUpdateWrapper);
+        if (payUpdateResult <= 0) {
+          refundTaskStatusService.updateTaskStatus(refundTaskId, 3, "修改支付单失败");
+          throw new ServiceException("修改支付单退款结果失败");
+        }
+
+        // 更新退款单
+        LambdaUpdateWrapper<RefundDO> refundUpdateWrapper = Wrappers.lambdaUpdate(RefundDO.class)
+            .eq(RefundDO::getOrderSn, orderSn);
+        RefundDO refundDO = new RefundDO();
+        refundDO.setTradeNo(result.getTradeNo());
+        refundDO.setStatus(result.getStatus());
+        int refundUpdateResult = refundMapper.update(refundDO, refundUpdateWrapper);
+        if (refundUpdateResult <= 0) {
+          refundTaskStatusService.updateTaskStatus(refundTaskId, 3, "修改退款单失败");
+          throw new ServiceException("修改退款单退款结果失败");
+        }
+
+        // 标记为退款成功，等待下游回写
+        refundTaskStatusService.updateTaskStatus(refundTaskId, 4, null, JSON.toJSONString(result));
+      } else {
+        result = JSON.parseObject(refundTaskDO.getRefundResult(), RefundResponse.class);
       }
 
-      // 3. 创建退款单（逐乘客）
-      createRefundRecords(refundTaskEvent, orderSn);
+      // 6. 先发送票务回写 MQ，再发送订单回写 MQ
+      RefundTaskDO latestTask = refundTaskMapper.selectOne(Wrappers.lambdaQuery(RefundTaskDO.class)
+          .eq(RefundTaskDO::getRefundTaskId, refundTaskId));
+      sendPendingRefundCallbackMessages(refundTaskEvent, latestTask);
 
-      // 4. 调用支付宝进行退款
-      RefundCommand refundCommand = BeanUtil.convert(payDO, RefundCommand.class);
-      refundCommand.setRefundTaskId(refundTaskId);
-      refundCommand.setPayAmount(new BigDecimal(refundTaskEvent.getRefundAmount()));
-      RefundRequest refundRequest = RefundRequestConvert.command2RefundRequest(refundCommand);
-      RefundResponse result = abstractStrategyChoose.chooseAndExecuteResp(refundRequest.buildMark(), refundRequest);
+      log.info("退款任务回写消息已投递，等待下游消费完成，refundTaskId: {}, orderSn: {}", refundTaskId, orderSn);
 
-      // 5. 更新支付单和退款单状态
-      payDO.setStatus(result.getStatus());
-      payDO.setPayAmount(payDO.getTotalAmount() - refundTaskEvent.getRefundAmount());
-      LambdaUpdateWrapper<PayDO> payUpdateWrapper = Wrappers.lambdaUpdate(PayDO.class)
-          .eq(PayDO::getOrderSn, orderSn);
-      int payUpdateResult = payMapper.update(payDO, payUpdateWrapper);
-      if (payUpdateResult <= 0) {
-        refundTaskStatusService.updateTaskStatus(refundTaskId, 3, "修改支付单失败");
-        throw new ServiceException("修改支付单退款结果失败");
-      }
-
-      // 更新退款单
-      LambdaUpdateWrapper<RefundDO> refundUpdateWrapper = Wrappers.lambdaUpdate(RefundDO.class)
-          .eq(RefundDO::getOrderSn, orderSn);
-      RefundDO refundDO = new RefundDO();
-      refundDO.setTradeNo(result.getTradeNo());
-      refundDO.setStatus(result.getStatus());
-      int refundUpdateResult = refundMapper.update(refundDO, refundUpdateWrapper);
-      if (refundUpdateResult <= 0) {
-        refundTaskStatusService.updateTaskStatus(refundTaskId, 3, "修改退款单失败");
-        throw new ServiceException("修改退款单退款结果失败");
-      }
-
-      // 6. 更新任务状态为成功
-      refundTaskStatusService.updateTaskStatus(refundTaskId, 2, null);
-
-      // 7. 发送 MQ 通知订单和票务服务（仅成功时）
-      if (Objects.equals(result.getStatus(), TradeStatusEnum.TRADE_CLOSED.tradeCode())) {
-        RefundTypeEnum refundTypeEnum = Objects.equals(refundTaskEvent.getRefundType(), 0)
-            ? RefundTypeEnum.PARTIAL_REFUND
-            : RefundTypeEnum.FULL_REFUND;
-        RefundResultCallbackOrderEvent callbackEvent = RefundResultCallbackOrderEvent.builder()
-            .orderSn(orderSn)
-            .refundTypeEnum(refundTypeEnum)
-            .partialRefundTicketDetailList(
-                BeanUtil.convert(refundTaskEvent.getRefundDetails(),
-                    org.opengoofy.index12306.biz.payservice.remote.dto.TicketOrderPassengerDetailRespDTO.class))
-            .build();
-        refundResultCallbackOrderSendProduce.sendMessage(callbackEvent);
-        log.info("退款任务成功，已发送 MQ 回调，refundTaskId: {}, orderSn: {}", refundTaskId, orderSn);
-      }
+      // 7. 保持待下游完成状态，由下游完成回执触发最终成功
+      refundTaskStatusService.updateTaskStatus(refundTaskId, 4, null,
+          result == null ? null : JSON.toJSONString(result));
 
     } catch (Exception e) {
       log.error("处理退款任务异常，refundTaskId: {}, orderSn: {}", refundTaskId, orderSn, e);
-      refundTaskStatusService.updateTaskStatus(refundTaskId, 3, e.getMessage());
-      // MQ 异常处理：如果是第一次失败，不需要重新投递，由定时任务负责重试
+      RefundTaskDO currentTask = refundTaskMapper.selectOne(Wrappers.lambdaQuery(RefundTaskDO.class)
+          .eq(RefundTaskDO::getRefundTaskId, refundTaskId));
+      boolean refundCompleted = Objects.nonNull(currentTask) && Objects.equals(currentTask.getStatus(), 4);
+      refundTaskStatusService.updateTaskStatus(refundTaskId, refundCompleted ? 4 : 3, e.getMessage(),
+          currentTask == null ? null : currentTask.getRefundResult());
       throw new ServiceException("退款任务处理失败");
     }
+  }
+
+  private void sendPendingRefundCallbackMessages(RefundTaskEvent refundTaskEvent, RefundTaskDO refundTaskDO) {
+    boolean ticketDone = refundTaskDO != null && Integer.valueOf(1).equals(refundTaskDO.getTicketCallbackStatus());
+    boolean orderDone = refundTaskDO != null && Integer.valueOf(1).equals(refundTaskDO.getOrderCallbackStatus());
+    if (!ticketDone) {
+      sendRefundCallbackTicketMessage(refundTaskEvent);
+    }
+    if (!orderDone) {
+      sendRefundCallbackOrderMessage(refundTaskEvent);
+    }
+  }
+
+  private void sendRefundCallbackTicketMessage(RefundTaskEvent refundTaskEvent) {
+    RefundResultCallbackTicketEvent callbackTicketEvent = RefundResultCallbackTicketEvent.builder()
+        .refundTaskId(refundTaskEvent.getRefundTaskId())
+        .orderSn(refundTaskEvent.getOrderSn())
+        .refundType(refundTaskEvent.getRefundType())
+        .orderItemRecordIds(refundTaskEvent.getOrderItemRecordIds())
+        .build();
+    refundResultCallbackTicketSendProduce.sendMessage(callbackTicketEvent);
+  }
+
+  private void sendRefundCallbackOrderMessage(RefundTaskEvent refundTaskEvent) {
+    RefundTypeEnum refundTypeEnum = Objects.equals(refundTaskEvent.getRefundType(), 0)
+        ? RefundTypeEnum.PARTIAL_REFUND
+        : RefundTypeEnum.FULL_REFUND;
+    RefundResultCallbackOrderEvent callbackEvent = RefundResultCallbackOrderEvent.builder()
+        .refundTaskId(refundTaskEvent.getRefundTaskId())
+        .orderSn(refundTaskEvent.getOrderSn())
+        .refundTypeEnum(refundTypeEnum)
+        .partialRefundTicketDetailList(
+            BeanUtil.convert(refundTaskEvent.getRefundDetails(),
+                org.opengoofy.index12306.biz.payservice.remote.dto.TicketOrderPassengerDetailRespDTO.class))
+        .orderItemRecordIds(refundTaskEvent.getOrderItemRecordIds())
+        .build();
+    refundResultCallbackOrderSendProduce.sendMessage(callbackEvent);
   }
 
   /**

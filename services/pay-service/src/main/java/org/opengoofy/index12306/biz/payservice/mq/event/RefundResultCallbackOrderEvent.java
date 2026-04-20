@@ -35,6 +35,11 @@ import java.util.List;
 @AllArgsConstructor
 public final class RefundResultCallbackOrderEvent {
     /**
+     * 退款任务 ID
+     */
+    private String refundTaskId;
+
+    /**
      * 订单号
      */
     private String orderSn;
@@ -47,4 +52,9 @@ public final class RefundResultCallbackOrderEvent {
      * 部分退款车票详情
      */
     private List<TicketOrderPassengerDetailRespDTO> partialRefundTicketDetailList;
+
+    /**
+     * 部分退款子订单记录 ID 集合
+     */
+    private List<String> orderItemRecordIds;
 }

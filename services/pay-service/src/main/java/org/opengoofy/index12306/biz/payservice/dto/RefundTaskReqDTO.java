@@ -63,4 +63,9 @@ public class RefundTaskReqDTO {
    * 退款详情列表
    */
   private List<RefundTaskDetailDTO> refundDetails;
+
+  /**
+   * 退款子订单记录ID集合
+   */
+  private List<String> orderItemRecordIds;
 }

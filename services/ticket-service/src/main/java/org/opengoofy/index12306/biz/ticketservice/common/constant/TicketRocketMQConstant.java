@@ -61,4 +61,14 @@ public final class TicketRocketMQConstant {
      * 支付结果回调购票消费者组 Key
      */
     public static final String PAY_RESULT_CALLBACK_TICKET_CG_KEY = "index12306_pay-service_pay-result-callback-ticket_cg${unique-name:}";
+
+    /**
+     * 退款结果回调车票 Tag Key
+     */
+    public static final String REFUND_RESULT_CALLBACK_TICKET_TAG_KEY = "index12306_pay-service_refund-result-callback-ticket_tag${unique-name:}";
+
+    /**
+     * 退款结果回调购票消费者组 Key
+     */
+    public static final String REFUND_RESULT_CALLBACK_TICKET_CG_KEY = "index12306_pay-service_refund-result-callback-ticket_cg${unique-name:}";
 }

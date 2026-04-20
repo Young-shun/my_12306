@@ -65,6 +65,7 @@ import org.opengoofy.index12306.biz.ticketservice.remote.PayRemoteService;
 import org.opengoofy.index12306.biz.ticketservice.remote.TicketOrderRemoteService;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.PayInfoRespDTO;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.PurchaseTicketConflictCheckReqDTO;
+import org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundCallbackTicketReqDTO;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundCallbackOrderUpdateReqDTO;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundReqDTO;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundRespDTO;
@@ -720,6 +721,39 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, TicketDO> imple
         }
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void refundCallbackTicketOrder(RefundCallbackTicketReqDTO requestParam) {
+        Result<org.opengoofy.index12306.biz.ticketservice.remote.dto.TicketOrderDetailRespDTO> orderDetailRespDTOResult = ticketOrderRemoteService
+                .queryTicketOrderByOrderSn(requestParam.getOrderSn());
+        if (!orderDetailRespDTOResult.isSuccess() || Objects.isNull(orderDetailRespDTOResult.getData())) {
+            throw new ServiceException("车票订单不存在");
+        }
+        org.opengoofy.index12306.biz.ticketservice.remote.dto.TicketOrderDetailRespDTO ticketOrderDetailRespDTO = orderDetailRespDTOResult
+                .getData();
+        List<TicketOrderPassengerDetailRespDTO> passengerDetails = ticketOrderDetailRespDTO.getPassengerDetails();
+        if (CollectionUtil.isEmpty(passengerDetails)) {
+            throw new ServiceException("车票子订单不存在");
+        }
+        List<TicketOrderPassengerDetailRespDTO> actualRefundPassengerDetails;
+        if (RefundTypeEnum.PARTIAL_REFUND.getType().equals(requestParam.getRefundType())) {
+            TicketOrderItemQueryReqDTO ticketOrderItemQueryReqDTO = new TicketOrderItemQueryReqDTO();
+            ticketOrderItemQueryReqDTO.setOrderSn(requestParam.getOrderSn());
+            ticketOrderItemQueryReqDTO.setOrderItemRecordIds(requestParam.getOrderItemRecordIds());
+            Result<List<TicketOrderPassengerDetailRespDTO>> queryTicketItemOrderById = ticketOrderRemoteService
+                    .queryTicketItemOrderById(ticketOrderItemQueryReqDTO);
+            if (!queryTicketItemOrderById.isSuccess() || CollectionUtil.isEmpty(queryTicketItemOrderById.getData())) {
+                throw new ServiceException("部分退款子订单不存在");
+            }
+            actualRefundPassengerDetails = queryTicketItemOrderById.getData();
+        } else if (RefundTypeEnum.FULL_REFUND.getType().equals(requestParam.getRefundType())) {
+            actualRefundPassengerDetails = passengerDetails;
+        } else {
+            throw new ServiceException("退款类型错误");
+        }
+        updateTicketAndSeatStatusAfterRefund(ticketOrderDetailRespDTO, actualRefundPassengerDetails);
+    }
+
     @ILog
     @Override
     public void cancelTicketOrder(CancelTicketOrderReqDTO requestParam) {
@@ -822,6 +856,7 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, TicketDO> imple
                     .refundType(RefundTypeEnum.PARTIAL_REFUND.getType().equals(requestParam.getType()) ? 0 : 1)
                     .refundAmount(refundAmount)
                     .refundDetails(refundDetails)
+                    .orderItemRecordIds(requestParam.getSubOrderRecordIdReqList())
                     .build();
             try {
                 payRemoteService.submitRefundTask(refundTaskReqDTO);
@@ -844,6 +879,7 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, TicketDO> imple
         if (CollectionUtil.isEmpty(refundPassengerDetails)) {
             return;
         }
+        List<TicketOrderPassengerDetailRespDTO> actualRefundPassengerDetails = new ArrayList<>();
         refundPassengerDetails.forEach(each -> {
             LambdaUpdateWrapper<TicketDO> ticketUpdateWrapper = Wrappers.lambdaUpdate(TicketDO.class)
                     .eq(TicketDO::getTrainId, ticketOrderDetailRespDTO.getTrainId())
@@ -866,15 +902,23 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, TicketDO> imple
                 log.warn("退款回滚车票状态命中0行，触发兜底更新。orderSn={}, carriage={}, seat={}, fallbackRows={}",
                         ticketOrderDetailRespDTO.getOrderSn(), each.getCarriageNumber(), each.getSeatNumber(),
                         fallbackRows);
+                if (fallbackRows > 0) {
+                    actualRefundPassengerDetails.add(each);
+                }
+            } else {
+                actualRefundPassengerDetails.add(each);
             }
         });
+        if (CollectionUtil.isEmpty(actualRefundPassengerDetails)) {
+            return;
+        }
         seatService.unlock(
                 String.valueOf(ticketOrderDetailRespDTO.getTrainId()),
                 ticketOrderDetailRespDTO.getDeparture(),
                 ticketOrderDetailRespDTO.getArrival(),
-                BeanUtil.convert(refundPassengerDetails, TrainPurchaseTicketRespDTO.class));
-        rollbackRemainingTicketCacheAfterRefund(ticketOrderDetailRespDTO, refundPassengerDetails);
-        rollbackTokenBucketAfterRefund(ticketOrderDetailRespDTO, refundPassengerDetails);
+                BeanUtil.convert(actualRefundPassengerDetails, TrainPurchaseTicketRespDTO.class));
+        rollbackRemainingTicketCacheAfterRefund(ticketOrderDetailRespDTO, actualRefundPassengerDetails);
+        rollbackTokenBucketAfterRefund(ticketOrderDetailRespDTO, actualRefundPassengerDetails);
     }
 
     private void rollbackRemainingTicketCacheAfterRefund(

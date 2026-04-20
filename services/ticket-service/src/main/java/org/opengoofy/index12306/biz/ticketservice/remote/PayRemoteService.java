@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundTaskReqDTO;
+import org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundTaskCallbackCompleteReqDTO;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundTaskStatusRespDTO;
 
 /**
@@ -60,4 +61,10 @@ public interface PayRemoteService {
      */
     @PostMapping("/api/pay-service/refund-task/submit")
     Result<Void> submitRefundTask(@RequestBody RefundTaskReqDTO requestParam);
+
+    /**
+     * 退款任务下游回写完成回执
+     */
+    @PostMapping("/api/pay-service/refund-task/callback/complete")
+    Result<Boolean> callbackComplete(@RequestBody RefundTaskCallbackCompleteReqDTO requestParam);
 }

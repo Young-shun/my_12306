@@ -15,30 +15,23 @@
  * limitations under the License.
  */
 
-package org.opengoofy.index12306.biz.payservice.remote;
+package org.opengoofy.index12306.biz.orderservice.remote;
 
-import org.opengoofy.index12306.biz.payservice.remote.dto.PayCallbackTicketReqDTO;
-import org.opengoofy.index12306.biz.payservice.remote.dto.RefundCallbackTicketReqDTO;
+import org.opengoofy.index12306.biz.orderservice.remote.dto.RefundTaskCallbackCompleteReqDTO;
 import org.opengoofy.index12306.framework.starter.convention.result.Result;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 /**
- * 车票远程服务调用
+ * 支付服务远程调用
  */
-@FeignClient(value = "index12306-ticket${unique-name:}-service", url = "${aggregation.remote-url:}")
-public interface TicketRemoteService {
+@FeignClient(value = "index12306-pay${unique-name:}-service", url = "${aggregation.remote-url:}")
+public interface PayRemoteService {
 
   /**
-   * 支付成功后同步回写车票和座位状态
+   * 退款任务下游回写完成回执
    */
-  @PostMapping("/api/ticket-service/ticket/pay/callback")
-  Result<Boolean> payCallbackTicket(@RequestBody PayCallbackTicketReqDTO requestParam);
-
-  /**
-   * 退款后同步回写车票和座位状态
-   */
-  @PostMapping("/api/ticket-service/ticket/refund/callback")
-  Result<Boolean> refundCallbackTicket(@RequestBody RefundCallbackTicketReqDTO requestParam);
+  @PostMapping("/api/pay-service/refund-task/callback/complete")
+  Result<Boolean> callbackComplete(@RequestBody RefundTaskCallbackCompleteReqDTO requestParam);
 }

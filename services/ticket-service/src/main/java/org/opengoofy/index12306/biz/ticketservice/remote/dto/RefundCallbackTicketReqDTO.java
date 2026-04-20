@@ -17,54 +17,19 @@
 
 package org.opengoofy.index12306.biz.ticketservice.remote.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 import java.util.List;
 
 /**
- * 异步退款任务请求 DTO
+ * 退款后同步回写车票请求参数
  */
 @Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class RefundTaskReqDTO {
+public class RefundCallbackTicketReqDTO {
 
-  /**
-   * 退款任务ID
-   */
-  private String refundTaskId;
-
-  /**
-   * 订单号
-   */
   private String orderSn;
 
-  /**
-   * 支付单号
-   */
-  private String paySn;
-
-  /**
-   * 退款类型：0-部分退款，1-全额退款
-   */
   private Integer refundType;
 
-  /**
-   * 退款总金额（单位：分）
-   */
-  private Integer refundAmount;
-
-  /**
-   * 退款详情列表
-   */
-  private List<RefundTaskDetailDTO> refundDetails;
-
-  /**
-   * 部分退款子订单记录 ID 集合
-   */
   private List<String> orderItemRecordIds;
 }

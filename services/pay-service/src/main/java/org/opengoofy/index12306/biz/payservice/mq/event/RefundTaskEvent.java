@@ -66,4 +66,9 @@ public class RefundTaskEvent implements Serializable {
    * 退款明细
    */
   private List<RefundTaskDetailDTO> refundDetails;
+
+  /**
+   * 退款子订单记录ID集合
+   */
+  private List<String> orderItemRecordIds;
 }

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.opengoofy.index12306.biz.ticketservice.remote.dto;
+package org.opengoofy.index12306.biz.payservice.mq.event;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -25,16 +25,16 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 /**
- * 异步退款任务请求 DTO
+ * 退款结果回调车票服务事件
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class RefundTaskReqDTO {
+public final class RefundResultCallbackTicketEvent {
 
   /**
-   * 退款任务ID
+   * 退款任务 ID
    */
   private String refundTaskId;
 
@@ -44,24 +44,9 @@ public class RefundTaskReqDTO {
   private String orderSn;
 
   /**
-   * 支付单号
-   */
-  private String paySn;
-
-  /**
    * 退款类型：0-部分退款，1-全额退款
    */
   private Integer refundType;
-
-  /**
-   * 退款总金额（单位：分）
-   */
-  private Integer refundAmount;
-
-  /**
-   * 退款详情列表
-   */
-  private List<RefundTaskDetailDTO> refundDetails;
 
   /**
    * 部分退款子订单记录 ID 集合

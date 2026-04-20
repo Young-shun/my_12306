@@ -72,6 +72,11 @@ public class RefundTaskDO extends BaseDO {
   private String refundDetail;
 
   /**
+   * 退款子订单记录ID集合(JSON)
+   */
+  private String orderItemRecordIds;
+
+  /**
    * 任务状态 0-待处理 1-处理中 2-成功 3-失败
    */
   private Integer status;
@@ -85,6 +90,16 @@ public class RefundTaskDO extends BaseDO {
    * 退款结果(第三方返回)
    */
   private String refundResult;
+
+  /**
+   * 车票回写完成标记 0-未完成 1-已完成
+   */
+  private Integer ticketCallbackStatus;
+
+  /**
+   * 订单回写完成标记 0-未完成 1-已完成
+   */
+  private Integer orderCallbackStatus;
 
   /**
    * 重试次数

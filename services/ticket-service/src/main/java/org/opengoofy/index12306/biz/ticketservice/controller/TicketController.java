@@ -27,6 +27,7 @@ import org.opengoofy.index12306.biz.ticketservice.dto.resp.RefundTicketRespDTO;
 import org.opengoofy.index12306.biz.ticketservice.dto.resp.TicketPageQueryRespDTO;
 import org.opengoofy.index12306.biz.ticketservice.dto.resp.TicketPurchaseRespDTO;
 import org.opengoofy.index12306.biz.ticketservice.remote.dto.PayInfoRespDTO;
+import org.opengoofy.index12306.biz.ticketservice.remote.dto.RefundCallbackTicketReqDTO;
 import org.opengoofy.index12306.biz.ticketservice.service.TicketService;
 import org.opengoofy.index12306.framework.starter.convention.result.Result;
 import org.opengoofy.index12306.framework.starter.web.Results;
@@ -101,5 +102,14 @@ public class TicketController {
     @PostMapping("/api/ticket-service/ticket/refund")
     public Result<RefundTicketRespDTO> commonTicketRefund(@RequestBody RefundTicketReqDTO requestParam) {
         return Results.success(ticketService.commonTicketRefund(requestParam));
+    }
+
+    /**
+     * 退款后同步回写车票和座位状态
+     */
+    @PostMapping("/api/ticket-service/ticket/refund/callback")
+    public Result<Boolean> refundCallbackTicket(@RequestBody RefundCallbackTicketReqDTO requestParam) {
+        ticketService.refundCallbackTicketOrder(requestParam);
+        return Results.success(Boolean.TRUE);
     }
 }

@@ -25,10 +25,12 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.opengoofy.index12306.biz.payservice.dao.entity.RefundTaskDO;
 import org.opengoofy.index12306.biz.payservice.dao.mapper.RefundTaskMapper;
+import org.opengoofy.index12306.biz.payservice.dto.RefundTaskCallbackCompleteReqDTO;
 import org.opengoofy.index12306.biz.payservice.dto.RefundTaskReqDTO;
 import org.opengoofy.index12306.biz.payservice.dto.RefundTaskStatusRespDTO;
 import org.opengoofy.index12306.biz.payservice.mq.event.RefundTaskEvent;
 import org.opengoofy.index12306.biz.payservice.mq.produce.RefundTaskSendProducer;
+import org.opengoofy.index12306.biz.payservice.service.RefundTaskStatusService;
 import org.opengoofy.index12306.framework.starter.convention.exception.ServiceException;
 import org.opengoofy.index12306.framework.starter.convention.result.Result;
 import org.opengoofy.index12306.framework.starter.web.Results;
@@ -52,6 +54,7 @@ public class RefundTaskController {
 
   private final RefundTaskSendProducer refundTaskSendProducer;
   private final RefundTaskMapper refundTaskMapper;
+  private final RefundTaskStatusService refundTaskStatusService;
 
   /**
    * 提交退款任务
@@ -70,7 +73,10 @@ public class RefundTaskController {
           .refundType(requestParam.getRefundType())
           .refundAmount(requestParam.getRefundAmount())
           .refundDetail(JSON.toJSONString(requestParam.getRefundDetails()))
+          .orderItemRecordIds(JSON.toJSONString(requestParam.getOrderItemRecordIds()))
           .status(0)
+          .ticketCallbackStatus(0)
+          .orderCallbackStatus(0)
           .retryCount(0)
           .maxRetryCount(3)
           .build();
@@ -87,6 +93,7 @@ public class RefundTaskController {
           .refundType(requestParam.getRefundType())
           .refundAmount(requestParam.getRefundAmount())
           .refundDetails(requestParam.getRefundDetails())
+          .orderItemRecordIds(requestParam.getOrderItemRecordIds())
           .build();
 
       // 发送消息到 MQ（同步发送确保消息可靠性）
@@ -132,6 +139,15 @@ public class RefundTaskController {
   }
 
   /**
+   * 下游回写完成回执
+   */
+  @PostMapping("/callback/complete")
+  public Result<Boolean> callbackComplete(@RequestBody RefundTaskCallbackCompleteReqDTO requestParam) {
+    refundTaskStatusService.markCallbackCompleted(requestParam.getRefundTaskId(), requestParam.getCallbackType());
+    return Results.success(Boolean.TRUE);
+  }
+
+  /**
    * 获取状态描述
    */
   private String getStatusDesc(Integer status) {
@@ -144,9 +160,11 @@ public class RefundTaskController {
       case 1:
         return "处理中";
       case 2:
-        return "成功";
+        return "回写完成";
       case 3:
         return "失败";
+      case 4:
+        return "退款成功待下游完成";
       default:
         return "未知";
     }

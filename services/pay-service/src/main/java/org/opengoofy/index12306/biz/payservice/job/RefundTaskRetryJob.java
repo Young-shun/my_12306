@@ -54,9 +54,9 @@ public class RefundTaskRetryJob {
 
     try {
       // 查询所有满足重试条件的任务
-      // status=3 (失败) 且 next_retry_time <= 当前时间 且 retry_count < max_retry_count
+      // status=3 (退款失败) 或 status=4 (退款成功但下游回写失败)
       LambdaQueryWrapper<RefundTaskDO> queryWrapper = Wrappers.lambdaQuery(RefundTaskDO.class)
-          .eq(RefundTaskDO::getStatus, 3) // 失败状态
+          .in(RefundTaskDO::getStatus, 3, 4) // 失败状态 / 待回写状态
           .le(RefundTaskDO::getNextRetryTime, new Date()) // 重试时间已到
           // retry_count < max_retry_count，按原生 SQL 列比较
           .apply("retry_count < max_retry_count")
@@ -82,6 +82,7 @@ public class RefundTaskRetryJob {
               .refundAmount(task.getRefundAmount())
               // 从 JSON 反序列化退款详情
               .refundDetails(deserializeRefundDetails(task.getRefundDetail()))
+              .orderItemRecordIds(deserializeOrderItemRecordIds(task.getOrderItemRecordIds()))
               .build();
 
           refundTaskSendProducer.sendMessage(retryEvent);
@@ -94,7 +95,7 @@ public class RefundTaskRetryJob {
           RefundTaskDO updateTask = new RefundTaskDO();
           updateTask.setRetryCount(nextRetryCount);
           updateTask.setNextRetryTime(nextRetryTime);
-          updateTask.setStatus(1); // 恢复为处理中状态
+          updateTask.setStatus(task.getStatus() == 3 ? 1 : 4); // 失败任务回到处理中，待回写任务保留待回写状态
           LambdaUpdateWrapper<RefundTaskDO> updateWrapper = Wrappers.lambdaUpdate(RefundTaskDO.class)
               .eq(RefundTaskDO::getRefundTaskId, task.getRefundTaskId());
           refundTaskMapper.update(updateTask, updateWrapper);
@@ -133,5 +134,15 @@ public class RefundTaskRetryJob {
     // 为了简化，这里只是一个示意
     // 实际实现应该调用 JSON.parseArray(refundDetailJson, RefundTaskDetailDTO.class)
     return com.alibaba.fastjson2.JSON.parseArray(refundDetailJson, RefundTaskDetailDTO.class);
+  }
+
+  /**
+   * 从 JSON 字符串反序列化退款子订单记录 ID 集合
+   */
+  private List<String> deserializeOrderItemRecordIds(String orderItemRecordIdsJson) {
+    if (orderItemRecordIdsJson == null) {
+      return List.of();
+    }
+    return com.alibaba.fastjson2.JSON.parseArray(orderItemRecordIdsJson, String.class);
   }
 }
